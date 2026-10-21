@@ -1,0 +1,3 @@
+[init] new phase folder: <engine-home>/runs/<run-set-2>/20261019_155025
+[init] starting adapter copied from <engine-home>/runs/pelias02/20261019_085214/final (left untouched); step counter reset to 0; the optimizer's memory of the earlier steps is kept
+[init] the original run's last measured evaluation: step 600 loss 0.0722

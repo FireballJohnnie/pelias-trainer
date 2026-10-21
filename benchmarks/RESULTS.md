@@ -19,8 +19,8 @@ Machine: Ryzen 7 5800X3D, RTX 4070 12 GB, Windows 11 with WSL2 (Ubuntu 26.04.1 L
 
 | Question | Answer |
 |---|---|
-| Which run made the GGUF files? | A **later run**, started 15:50 on 2026-10-19. The export record names a "phase-2" adapter (310 modules, 21,166,080 parameters), and the author's RUNBOOK says that adapter was saved from that later run's folder (**recorded**). Its status file and per-step log are in section 2b; no summary file or checker output for it is in this repository yet. The run in section 2 started at 08:52 the same day and is a different run. The author states the later run's logs come from what will become **0.3** (**author-stated**). |
-| Which trainer produced the run in section 2? | The **Pelias 0.2 launcher** (the checker names it). The log says only "0.2". The author states the run used the 0.2 launcher with the **0.2.1 patch**, applied on the fly in another conversation and so not named in the log (**author-stated**). The author points to the archive `peliasv0.2.tar` as the source of the 0.2.1 label: the archive and its folder are named v0.2, but its README title ("Pelias engine v0.2.1") and `pelias/__init__.py` (`__version__ = "0.2.1"`) read 0.2.1 (**recorded**; its files are dated 2026-10-19, 01:52 to 03:11, before the section 2 run started at 08:52). That shows what the archive says, not which copy of the code a run loaded. A log that reads "0.2" therefore does not contradict 0.2.1. |
+| Which run made the GGUF files? | The export log prints the adapter it merged: the one saved by the **later run** (section 2b), started 15:50 on 2026-10-19, 310 modules, 21,166,080 parameters (**measured**, `raw/gguf-export/export_Q5_K_M_20261019_201356.log`, line 4; that log covers the `Q5_K_M` file only). That run **started from a copy of the section 2 run's final adapter**, step counter reset to 0 (**measured**, `raw/training-run-second-phase/init_stage_lines.txt`). So the GGUF files carry the 616 steps of section 2 and then the 114 steps of section 2b (**derived**). A separate 50-step run started at 14:33 the same day is not in this chain; its logs are not published. |
+| Which package ran? | Both runs' launcher records carry the same package-archive checksum, `1baa39ec…5548` (**measured**, `launcher_run.json` in each run's raw folder). The archive on the author's disk, `peliasv0.2.tar`, hashes to that value (**measured**, `sha256sum`, 2026-10-20). The archive and its folder are named v0.2, but its README title and `pelias/__init__.py` read **0.2.1** (**recorded**). Both records name the same launcher, version 1.0.0 (file name redacted). The author states 0.2.1 was a patch applied on the fly in another conversation, so the logs say only "0.2", and that the later run's logs are from what will become **0.3** (**author-stated**); the launcher records show the same archive for both runs. |
 | Pelias 0.1? | No benchmarks exist for it (author-stated). |
 | 5-bit and 4-bit GGUF? | Yes: `Q5_K_M` and `Q4_K_M`, section 3 and 4. |
 | 3-bit GGUF? | **None.** No 3-bit file or log was found; the logs here cover 4-bit and 5-bit files only. |
@@ -29,20 +29,20 @@ Machine: Ryzen 7 5800X3D, RTX 4070 12 GB, Windows 11 with WSL2 (Ubuntu 26.04.1 L
 
 ## 2. An earlier training run (measured)
 
-This run is **not** the one that produced the GGUF files in sections 3 and 4 (see section 1).
+The GGUF files in sections 3 and 4 were not merged from this run's adapter, but from the adapter of a later run that started from it (sections 1 and 2b).
 
-Raw: `raw/training-run-0.2/results_pelias02.json` (summary) and `raw/training-run-0.2/verification_pelias02.json` (the checker's output). Run date 2026-10-19.
+Raw: `raw/training-run-0.2/results_pelias02.json` (summary), `verification_pelias02.json` (the checker's output), `status.txt` (632 lines), `metrics.jsonl` (616 rows, one per step) and `launcher_run.json` (the launcher's record of the settings), all in `raw/training-run-0.2/`. Run date 2026-10-19.
 
 | Quantity | Value |
 |---|---|
 | Optimizer steps | 616, numbered 1 to 616 with no gaps; all values finite |
 | Wall time | 202.7 min |
-| Training loss, first steps to last steps | 2.006 to 0.194 |
+| Training loss, mean of the first 5 steps to mean of the last 5 | 2.006 to 0.194 (**derived**) |
 | Evaluation loss over 12 evaluations | 0.649 first, 0.0722 last (also the best) |
 | Largest gradient norm | 2.82 (clipped to 1.0 by the optimizer) |
 | Throughput, median (p10 to p90) | 247.85 tok/s (88.4 to 598.1) |
 | Time per micro-batch, median | 4.55 s |
-| Share of step time waiting for expert transfers | 26.8% |
+| Share of `sec_micro` spent waiting for expert transfers | 26.8% (**derived**: sum of `stream_wait_s` ÷ sum of `sec_micro`) |
 | Peak allocated VRAM | 8.02 GiB |
 | Highest GPU memory seen by `nvidia-smi` | 9,705 MiB of 12,282 MiB |
 | Peak process RAM | 20.0 GiB |
@@ -51,6 +51,8 @@ Raw: `raw/training-run-0.2/results_pelias02.json` (summary) and `raw/training-ru
 | Adapter | LoRA rank 16, alpha 32, 310 modules (10 x 4 attention + 30 x 5 DeltaNet + 40 x 3 shared expert), 21,166,080 trainable parameters, float32, 84,751,528 bytes; **no LoRA on the routed experts** |
 | Settings | 2 epochs, learning rate 1e-4, gradient accumulation 4, token budget 4,096, 2 resident layers, layer-0 experts at 8-bit, seed 3407 |
 | Data (private; counts only) | 1,300 rows: 1,232 train and 68 evaluation; 987,440 assistant tokens; longest row 4,002 tokens against a 4,096 limit; none truncated |
+
+**Re-check against the per-step log.** The step count, the two loss means, the throughput median and percentiles (percentile index = round(p x (n-1))), the median `sec_micro`, the stream-wait share, peak VRAM, `nvidia-smi` maximum, RAM, swap and largest gradient norm above were re-computed from `metrics.jsonl` and `status.txt` and match; so do the first and last evaluation losses and the wall time.
 
 **Derived check.** 616 steps x 4 micro-batches = 2,464 = 2 epochs x 1,232 rows, which fits one row per micro-batch.
 
@@ -65,35 +67,38 @@ The checker's own verdict, unchanged: `VERDICT: NOT COMPLETE AND SOUND (2 FAIL, 
 
 ## 2b. The later training run, which made the GGUF files (measured)
 
-Raw: `raw/training-run-second-phase/status.txt` (the run's status file, 123 lines) and `raw/training-run-second-phase/metrics.jsonl` (one row per step, 114 rows). Run date 2026-10-19, started 15:50. The status file's last line says the adapter was saved to this run's `final` folder; the author's RUNBOOK says the phase-2 adapter used for the GGUF files was copied from there (**recorded**). No summary file or checker output for this run is in this repository.
+Raw, in `raw/training-run-second-phase/`: `status.txt` (123 lines), `metrics.jsonl` (114 rows, one per step), `launcher_run.json` (the launcher's record of the settings) and `init_stage_lines.txt` (what the step that prepared the starting folder printed). Run date 2026-10-19, started 15:50. The export log names this run's adapter (section 1). No summary file or checker output for this run is in this repository.
 
 | Quantity | Value |
 |---|---|
 | Optimizer steps | 114, numbered 1 to 114 with no gaps; every value in the per-step log is finite |
 | Wall time | 37.9 min (the `[done]` line) |
 | Data (counts only; private) | 225 train rows and 56 evaluation rows; the log's `max_len` is 7038 |
-| Settings printed by the log | 5 warm-up steps, gradient accumulation 4, token budget 8,192; learning rate peaks at 5e-05 (per-step column) |
+| Settings | 5 warm-up steps, gradient accumulation 4, token budget 8,192 (the `[plan]` line); 2 epochs, seed 3407, 2 resident layers, learning rate 5e-05 (`launcher_run.json`) |
 | Trainable parameters | 21,166,080, the same count as the adapter in section 2 (**derived** by comparing the two logs) |
-| Start | the log says it resumed from an `init` folder at step 0; what that folder held is not recorded in the log |
-| Training loss | step 1: 2.0792; step 114: 0.235; mean of the first 10 steps 0.847 and of the last 10 steps 0.355 (**derived**) |
+| Start | it resumed from an `init` folder at step 0 (the `[resume]` line). The step that made that folder printed: starting adapter copied from the **section 2 run's `final` folder**, step counter reset to 0, the optimizer's memory of the earlier steps kept, and that run's last evaluation "step 600 loss 0.0722", which matches section 2 (**measured**, `init_stage_lines.txt`) |
+| Training loss | mean of the first 5 steps 0.638 and of the last 5 steps 0.429 (**derived**, same definition as section 2); step 1: 2.0792, step 114: 0.235 |
 | Evaluation loss | 0.3779 (step 25), 0.2579 (step 50), 0.2261 (step 75), 0.2089 (step 100); four evaluations |
 | Largest gradient norm | 8.96 (step 2); 113 of the 114 steps are above 1.0 |
 | Tokens per step | median 228 (lowest 51, highest 6,918) |
-| Throughput, median (p10 to p90) | 56.45 tok/s (17.9 to 364.7) (**derived** from the per-step column) |
+| Throughput, median (p10 to p90) | 56.45 tok/s (17.7 to 366.3) (**derived** from the per-step column, same definition as section 2) |
 | `sec_micro`, median (lowest to highest) | 4.02 s (3.53 to 8.90) |
 | Expert stream per logged step | 30.38 GiB in 72 fetches on every step; `stream_wait_s` 1.23 to 1.25 s (median 1.24) |
+| Share of `sec_micro` spent waiting for expert transfers | 29.5% (**derived**, same definition as section 2) |
 | Peak allocated VRAM | 9.36 GiB (reserved, at most 9.86 GiB) |
 | Highest GPU memory seen by `nvidia-smi` | 10,844 MiB of 12,282 MiB |
 | Process RAM, swap | 19.9 GiB; swap 0.0 GiB |
-| Package version | **not recorded**: the status file starts at its `[data]` line and has no version banner |
+| Package version | the status file starts at its `[data]` line and has no version banner; the launcher record carries the same archive checksum as the section 2 run (section 1) |
 
-**Read these numbers carefully.** Throughput here is the tokens in a step divided by its time, and the expert stream is the same size on every step, so the figure moves with how long the rows are (the median step has 228 tokens). It is not comparable with the 247.85 tok/s in section 2, which used different data, and this page makes no speed comparison between the two runs. Single-step losses swing widely (0.0296 at step 13, 2.0792 at step 1). The evaluation loss is on 56 rows. None of this says anything about quality; the quality checks are in section 4.
+**Read these numbers carefully.** Throughput here is the log's `tokens` divided by its `sec_micro`, and the expert stream is the same size on every step, so the figure moves with how long the rows are (the median step has 228 tokens). It is not comparable with the 247.85 tok/s in section 2, which used different data, and this page makes no speed comparison between the two runs. Single-step losses swing widely (0.0296 at step 13, 2.0792 at step 1). The evaluation loss is on 56 rows. None of this says anything about quality; the quality checks are in section 4.
 
 ---
 
-## 3. The 4-bit and 5-bit GGUF files (recorded)
+## 3. The 4-bit and 5-bit GGUF files (`Q5_K_M` measured, the rest recorded)
 
-Raw: `raw/gguf-export/export_record.md`, dated 2026-10-19. It records what was produced and was written **before** any server had loaded the files. The adapter it merged is the phase-2 adapter, from the later run (section 1), not the run in section 2.
+Raw: `raw/gguf-export/export_record.md`, dated 2026-10-19. It records what was produced and was written **before** any server had loaded the files. The adapter it merged is the one saved by the run in section 2b (section 1).
+
+Raw: `raw/gguf-export/export_Q5_K_M_20261019_201356.log` (**measured**, 2,074 lines). It prints the adapter (310 modules, 21,166,080 parameters, r 16, alpha 32), "310 modules merged (scale 2) into 26 shards", the bf16 file's 753 tensors, model size 67764.29 MiB (16.01 BPW), quant size 24162.81 MiB (5.71 BPW), and the final `Q5_K_M` sha256 `ccc6720d…f46f0`; these match the table below. No log of the `Q4_K_M` export has been found, so that row stays **recorded**.
 
 | File (name replaced by `test-model`) | Bytes | Size | Bits per weight | Quantise time | sha256 |
 |---|---|---|---|---|---|
@@ -149,10 +154,10 @@ The program that ran these keeps every reply in its log and the log is marked pr
 | Whether the expert stream is near the PCIe and RAM floors during training | time the stream alone, compare with the engine's measured floors |
 | Effect of the v0.3 adjustments (peak-VRAM guard, cached probe, layer-input offload) | run with each switch off and on, same data |
 | MTP draft-head overlap and agreement before and after alignment | run the aligner end to end and log its metrics |
-| A run log that records the package version (the archive's own files read 0.2.1; the author states: section 2 run = 0.2 plus the 0.2.1 patch; later run = what will become 0.3) | have the launcher print the package's `__version__` at start and keep that line in the log |
+| A log line that prints the package's `__version__` at run start | the launcher record's archive checksum already identifies the package; to make the version readable in the log, have the launcher print `pelias.__version__` at start |
 | 3-bit files | quantise a 3-bit file from the bf16 file, then repeat sections 4.1 and 4.2 |
-| The per-step log of the run in section 2 | `run.metrics.jsonl` (237 KiB, 616 rows) and `status.txt` (75 KiB) are present on the author's machine per the checker, in that run's folder inside WSL; **not in repo yet** |
 | Summary file and checker output for the later run (section 2b) | none found in the logs folder; run the same checker on that run's folder |
+| A log of the `Q4_K_M` export | none found; repeat that export step with its output saved |
 
 ---
 
@@ -160,6 +165,9 @@ The program that ran these keeps every reply in its log and the log is marked pr
 
 * Local paths, the launcher's file name and the model's file name were replaced (`<engine-home>`, `<hf-cache>`, `<launcher-0.2>`, `test-model`). One build-host identifier was removed from the kernel string. JSON files were re-written with indentation; no number was changed.
 * In `verification_pelias02.json` the four reply-check rows are replaced by one `WITHHELD` row. The verdict line and counts are untouched.
-* In `raw/training-run-second-phase/status.txt` the run-folder path (2 places) was replaced by `<run-folder>`; `metrics.jsonl` is unchanged.
+* In `raw/training-run-second-phase/status.txt` the run-folder path (2 places) was replaced by `<run-folder>`; in `raw/training-run-0.2/status.txt` the run-folder path (1 place) was replaced by `<engine-home>/…`. Both `metrics.jsonl` files are unchanged.
+* In the two `launcher_run.json` files the launcher's file name and the log path were replaced; no number or checksum was changed.
+* In `init_stage_lines.txt` the run-folder names were replaced (`<engine-home>`, `<run-set-2>`); the fourth line of the original output named a private script and was removed.
+* In the `Q5_K_M` export log local paths, the model's file name and the run-folder name were replaced; nothing else was changed.
 * In `export_record.md` one word was removed from a sentence in the list of unverified items (the sentence is otherwise unchanged).
 * The model files, adapter, training data and the private model's replies are not in this repository.

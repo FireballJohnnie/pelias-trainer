@@ -1,0 +1,15 @@
+{
+ "micro_batch": "single",
+ "token_budget": 8192,
+ "grad_accum": 4,
+ "epochs": 2,
+ "seed": 3407,
+ "dataset_sha256": "efbfb9034fd13ca80e53901f3dbd8bcfdcb8415bf42f6e1c01f859e65d5a14c2",
+ "tar_sha256": "1baa39ec1bb461431dea878ae97967d5caeff8404ce99fe9e15e7399ec315548",
+ "lr": 5e-05,
+ "resident_layers": 2,
+ "launcher": "<launcher-0.2>",
+ "launcher_version": "1.0.0",
+ "started": "2026-10-19 15:54:49",
+ "launcher_log": "<engine-home>/runs/pelias02_stages/train_20261019_155449.log"
+}
