@@ -3,6 +3,10 @@
 **Fine-tuning a large Mixture-of-Experts model on one 12 GB consumer GPU: the always-on part trains on the GPU, the frozen quantised experts stream in from pinned system RAM, one layer at a time.**
 *Companion to [pelias-engine](https://github.com/FireballJohnnie/pelias-engine) (inference). The two meet at one interface: the GGUF file.*
 
+> **End goal:** to make Pelias (this engine and its trainer) universal for every LLM that uses a Mixture-of-Experts architecture.¹
+>
+> ¹ *Footnote. This is a goal, not a result.* There is potential for it to happen, with proper benchmarking and training, but it needs additional testing beyond the author's capabilities. While this work opens up better potential speed and accuracy for MoE models, it also has the potential to improve the overall speed and accuracy of non-MoE models. Both are **stretch goals** (**author-stated**). Today's results come from one machine and one model (Qwen3.6-35B-A3B), and this repository holds no non-MoE results. Path to find out: repeat the ledger's tests on a second MoE model with a different expert layout and on one non-MoE model, and log them in the same format.
+
 > **PRE-RELEASE DRAFT, 2026-10-20. Not published.**
 > This repository is private and holds a draft. This file describes what the code in the author's development folder does, as read from its own documentation and imports. **Numbers from logs are in [`benchmarks/RESULTS.md`](benchmarks/RESULTS.md)** (two training runs, the second continuing from the first, which together made the 4-bit and 5-bit GGUF files; plus the export record, the `Q5_K_M` export log and tests of those files); this file gives no training-speed, memory or accuracy number of its own. Sources, with their roles, are in [`CITATIONS.md`](CITATIONS.md).
 > Every number in this file carries one label: **measured** (counted or run on the author's machine), **published** (vendor or standard specification), **derived** (arithmetic from labelled inputs), **estimate** (a guess, with the method to replace it), **author-stated** (the author told me; no log attached), **unmeasured** (with a planned way to measure it).
