@@ -1,0 +1,280 @@
+{
+ "title": "RUN VERIFICATION: Pelias 0.2 (<launcher-0.2>)",
+ "command": "pelias02",
+ "version": "1.0.1",
+ "seconds": 0.3,
+ "verdict": "VERDICT: NOT COMPLETE AND SOUND  (2 FAIL, 0 warn, 24 pass)  -> fix the FAIL lines above, then run this again",
+ "data": {
+  "result": {
+   "variant": "pelias02",
+   "run_dir": "<engine-home>/runs/pelias02/20261019_085214",
+   "title": "Pelias 0.2 (<launcher-0.2>)",
+   "total_steps": 616,
+   "minutes": 202.7,
+   "metrics": {
+    "n": 616,
+    "contiguous": true,
+    "all_finite": true,
+    "loss_first": 2.00584,
+    "loss_last": 0.19422,
+    "gn_max": 2.8238,
+    "gn_finite": true,
+    "tok_s_median": 247.85000000000002,
+    "tok_s_p10": 88.4,
+    "tok_s_p90": 598.1,
+    "sec_micro_median": 4.55,
+    "vram_peak_max": 8.02,
+    "smi_max": 9705.0,
+    "rss_max": 20.0,
+    "swap_first": 0.0,
+    "swap_max": 0.0,
+    "procs_max": 0.0,
+    "elapsed_min": 202.7,
+    "stream_wait_share": 0.268176588057958
+   },
+   "eval": {
+    "first": 0.649,
+    "last": 0.0722,
+    "best": 0.0722,
+    "n": 12
+   },
+   "gpu_after": {
+    "used_mib": 493.0,
+    "free_mib": 11518.0
+   },
+   "adapter": {
+    "dir": "<engine-home>/runs/pelias02/20261019_085214/final",
+    "config_exists": true,
+    "weights_exist": true,
+    "n_tensors": 620,
+    "params": 21166080,
+    "dtypes": {
+     "F32": 620
+    },
+    "modules": 310,
+    "pairs_complete": true,
+    "expert_modules": [],
+    "bytes": 84751528
+   },
+   "train_args": {
+    "stage": "train",
+    "hf_cache": "<hf-cache>",
+    "quant_cache": "<engine-home>/pelias_q4_cache_v02",
+    "data": "<engine-home>/pelias_data/train.pt",
+    "run_dir": "<engine-home>/runs/pelias02/20261019_085214",
+    "resume": null,
+    "device": "cuda:0",
+    "resident_layers": 2,
+    "token_budget": 4096,
+    "grad_accum": 4,
+    "epochs": 2,
+    "lr": 0.0001,
+    "weight_decay": 0.0,
+    "lora_r": 16,
+    "lora_alpha": 32,
+    "use_rslora": false,
+    "ce_chunk": 256,
+    "layer0_bits": 8,
+    "expert_backend": "auto",
+    "dequant": "auto",
+    "flush_every": 2,
+    "eval_every": 50,
+    "save_every": 100,
+    "smoke_steps": 2,
+    "seed": 3407,
+    "adapter": null,
+    "probe_file": null,
+    "max_new_tokens": 48
+   },
+   "backends": {
+    "expert": "grouped",
+    "dequant": "triton",
+    "notes": "grouped_mm self-test: ok; triton dequant self-test: ok"
+   },
+   "hardware": {
+    "gpu": "NVIDIA GeForce RTX 4070",
+    "driver": "617.42",
+    "vram_mib": "12282",
+    "compute_cap": "8.9",
+    "ram_gib_visible": 47.0,
+    "torch": "2.14.1+cu130",
+    "transformers": "5.17.0",
+    "peft": "0.21.2",
+    "triton": "3.8.0",
+    "checker_python": "3.14.4",
+    "wsl_kernel": "Linux version 6.18.54.1-microsoft-standard-WSL2 (gcc (GCC) 1"
+   },
+   "verified_at": "2026-10-19 13:41:40",
+   "fails": 2,
+   "warns": 0,
+   "complete": false
+  }
+ },
+ "rows": [
+  {
+   "level": "INFO",
+   "key": "gen.audit",
+   "msg": "data generator audit: ok=True, errors_total=0, rows=1300"
+  },
+  {
+   "level": "PASS",
+   "key": "run.status.txt",
+   "msg": "present (74.96 KiB)"
+  },
+  {
+   "level": "PASS",
+   "key": "run.metrics.jsonl",
+   "msg": "present (237.16 KiB)"
+  },
+  {
+   "level": "PASS",
+   "key": "run.owner",
+   "msg": "run folder owned by the normal user (the run was not started as root)"
+  },
+  {
+   "level": "INFO",
+   "key": "run.plan",
+   "msg": "planned 616 optimizer steps, grad_accum 4, token budget 4096 per micro-batch, warmup 30"
+  },
+  {
+   "level": "PASS",
+   "key": "run.done",
+   "msg": "'[done]' line present: 616 steps in 202.7 min"
+  },
+  {
+   "level": "PASS",
+   "key": "run.errors",
+   "msg": "no traceback / out-of-memory / 'Killed' text in the log"
+  },
+  {
+   "level": "PASS",
+   "key": "m.rows",
+   "msg": "616 optimizer steps recorded"
+  },
+  {
+   "level": "PASS",
+   "key": "m.contiguous",
+   "msg": "steps are 1..616 with no gaps"
+  },
+  {
+   "level": "PASS",
+   "key": "m.loss",
+   "msg": "loss fell from 2.006 (first steps) to 0.194 (last steps)"
+  },
+  {
+   "level": "PASS",
+   "key": "m.grad_norm",
+   "msg": "largest gradient norm 2.82 (clipped to 1.0 by the optimizer)"
+  },
+  {
+   "level": "PASS",
+   "key": "m.eval",
+   "msg": "eval loss 0.649 -> 0.072 (best 0.072) over 12 evaluations"
+  },
+  {
+   "level": "INFO",
+   "key": "r.speed",
+   "msg": "median 248 tok/s (p10 88, p90 598), median 4.5 s per micro-batch, total 202.7 min"
+  },
+  {
+   "level": "INFO",
+   "key": "r.stream_wait",
+   "msg": "27% of the step time was spent waiting for expert transfers (lower is better)"
+  },
+  {
+   "level": "PASS",
+   "key": "r.vram_alloc",
+   "msg": "peak allocated VRAM 8.02 GiB"
+  },
+  {
+   "level": "PASS",
+   "key": "r.vram_smi",
+   "msg": "nvidia-smi never showed more than 9705 MiB used"
+  },
+  {
+   "level": "PASS",
+   "key": "r.rss",
+   "msg": "peak process RAM 20.0 GiB"
+  },
+  {
+   "level": "PASS",
+   "key": "r.swap",
+   "msg": "swap grew by 0.0 GiB during the run"
+  },
+  {
+   "level": "PASS",
+   "key": "r.procs",
+   "msg": "at most 0 trainer processes at once"
+  },
+  {
+   "level": "INFO",
+   "key": "r.vram_after",
+   "msg": "GPU memory in use right now (run finished): 493 MiB used, 11518 MiB free (Windows programs also use some)"
+  },
+  {
+   "level": "PASS",
+   "key": "d.audit",
+   "msg": "train.audit.json: 1300 rows, none over 4096 tokens, no text lost in rendering, longest 4002 tokens"
+  },
+  {
+   "level": "INFO",
+   "key": "d.counts",
+   "msg": "train 1232 / eval 68 samples, assistant tokens 987440, p50 1146 tokens, p90 3343 tokens"
+  },
+  {
+   "level": "PASS",
+   "key": "a.weights",
+   "msg": "adapter_model.safetensors is complete: 620 tensors, 80.83 MiB, 310 LoRA modules, dtypes {'F32': 620}"
+  },
+  {
+   "level": "PASS",
+   "key": "a.modules",
+   "msg": "310 LoRA modules (expected 310: 10x4 attention + 30x5 DeltaNet + 40x3 shared expert)"
+  },
+  {
+   "level": "PASS",
+   "key": "a.pairs",
+   "msg": "every module has both lora_A and lora_B"
+  },
+  {
+   "level": "PASS",
+   "key": "a.no_expert_lora",
+   "msg": "no LoRA on the routed experts"
+  },
+  {
+   "level": "PASS",
+   "key": "a.params",
+   "msg": "21,166,080 parameters (expected about 21.2 M)"
+  },
+  {
+   "level": "INFO",
+   "key": "a.config",
+   "msg": "r=16 alpha=32 rslora=False targets=12 base=None"
+  },
+  {
+   "level": "INFO",
+   "key": "a.best",
+   "msg": "best/ checkpoint present"
+  },
+  {
+   "level": "WITHHELD",
+   "key": "p.reply",
+   "msg": "4 post-run reply checks of the fine-tuned private model (2 PASS, 2 FAIL); the prompts and replies are withheld"
+  },
+  {
+   "level": "PASS",
+   "key": "v.backends",
+   "msg": "backends used: expert=grouped dequant=triton"
+  },
+  {
+   "level": "INFO",
+   "key": "v.layer0",
+   "msg": "layer-0 experts at 8-bit (v0.2 default 8)"
+  },
+  {
+   "level": "INFO",
+   "key": "v.seed",
+   "msg": "seed 3407, lr 0.0001, epochs 2, resident layers 2, token budget 4096"
+  }
+ ]
+}
