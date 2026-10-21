@@ -57,13 +57,7 @@ The 0.1 README says these two speed up the DeltaNet layers if they can be import
 
 ## 7. Development tools
 
-* **Claude** (Anthropic): Sonnet, Opus and Fable models, used for coding, review, analysis and documentation. Exact versions are not recorded.
-* **Gemini Pro and Gemini 4 Argon** (Google), used for the same kinds of work.
-  *Gemini 4 Argon: our next era of frontier intelligence*, Google, 2026-09-30. <https://blog.google/innovation-and-ai/models-and-research/gemini-models/gemini-4-argon/>.
-  *Gemini 4 Argon is now available for everyone* (headline: "Gemini 4 Argon: Built to solve your hardest problems"), Google, 2026-10-13: available in the Gemini app to Google AI Pro and Google AI Ultra subscribers and in the API from that date. <https://blog.google/innovation-and-ai/models-and-research/gemini-models/introducing-gemini-4-argon/>.
-  API reference: model ID `gemini-4-argon`, context window 1,048,576 tokens. <https://ai.google.dev/gemini-api/docs/models/gemini-4-argon>.
-
-Which tool helped with which part is not recorded, so no per-file attribution is made. The research, the design and the training experiments are the author's.
+* **Claude** (Anthropic) and **Gemini** (Google): coding, review, analysis and documentation, under the author's direction. Versions are not recorded, and no per-file attribution is made. The research, the design and the training experiments are the author's.
 
 ## 8. Not cited, on purpose
 

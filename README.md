@@ -7,7 +7,9 @@
 >
 > ¹ *Footnote. This is a goal, not a result.* There is potential for it to happen, with proper benchmarking and training, but it needs additional testing beyond the author's capabilities. While this work opens up better potential speed and accuracy for MoE models, it also has the potential to improve the overall speed and accuracy of non-MoE models. Both are **stretch goals** (**author-stated**). Today's results come from one machine and one model (Qwen3.6-35B-A3B), and this repository holds no non-MoE results. Path to find out: repeat the ledger's tests on a second MoE model with a different expert layout and on one non-MoE model, and log them in the same format.
 
-> **PRE-RELEASE DRAFT, 2026-10-20. Not published.**
+**Author and maintainer:** John Lipka. Developed with AI assistance under his direction. Sibling repository: [pelias-engine](https://github.com/FireballJohnnie/pelias-engine).
+
+> **PRE-RELEASE DRAFT, 2026-10-20 (focus note added 2026-10-21). Not published.**
 > This repository is private and holds a draft. This file describes what the code in the author's development folder does, as read from its own documentation and imports. **Numbers from logs are in [`benchmarks/RESULTS.md`](benchmarks/RESULTS.md)** (two training runs, the second continuing from the first, which together made the 4-bit and 5-bit GGUF files; plus the export record, the `Q5_K_M` export log and tests of those files); this file gives no training-speed, memory or accuracy number of its own. Sources, with their roles, are in [`CITATIONS.md`](CITATIONS.md).
 > Every number in this file carries one label: **measured** (counted or run on the author's machine), **published** (vendor or standard specification), **derived** (arithmetic from labelled inputs), **estimate** (a guess, with the method to replace it), **author-stated** (the author told me; no log attached), **unmeasured** (with a planned way to measure it).
 > No "first ever" claim is made.
@@ -119,7 +121,7 @@ The runtime environment (PyTorch, Triton, PEFT, `transformers` and their GPU ker
 
 | Item | Licence | Source |
 |---|---|---|
-| This repository's code | Apache-2.0 **(proposed; the author has not yet confirmed the licence or the copyright holder)** | `LICENSE` is the standard text, same as pelias-engine |
+| This repository's code | Apache-2.0 **(proposed; copyright holder proposed as Copyright (c) 2026 John Lipka; the author confirms licence and holder before release)** | `LICENSE` is the standard text, same as pelias-engine |
 | Qwen3.6-35B-A3B (base model; weights are **not** in the repository) | Apache-2.0 | Hugging Face model page, checked 2026-10-20 |
 | `transformers`, PEFT, Triton, `safetensors` (imported by the code) | Apache-2.0, Apache-2.0, MIT, Apache-2.0 | each project's GitHub page, checked 2026-10-20 |
 | PyTorch, NumPy (imported by the code) | **not yet checked** | the pages fetched on 2026-10-20 did not name a licence; read each project's own `LICENSE` file before release |
@@ -142,6 +144,11 @@ The author's rule: nothing is released until all testing for the current model i
 
 ## 9. Roadmap and open questions
 
+* **Current focus (2026-10-21).** No training run has been made since the second run recorded in `benchmarks/RESULTS.md`. The work is on the engine (stage 2 on the test machine; `pelias-engine`, `benchmarks/RESULTS.md` section 8). Three engine findings bear on this trainer; each needs its own test before it is used here.
+  * *Measured, engine floors:* CPU reads and GPU zero-copy reads share one DRAM; together they reach 47.6 GB/s, 1.04x the CPU alone. The training expert stream reads the same RAM, so a second reader on that bus is expected to add little. **Hypothesis for training;** the stream-speed measurement planned below is the test.
+  * *Derived, simulation on inference traces:* a recency cache of experts in VRAM held 0.86 of the chosen expert bytes against 0.77 for a fixed set of the same size. Router behaviour in training differs from decoding, so whether it transfers is **unmeasured**. Test: record router choices on a training batch and run the same simulator.
+  * *Measured, engine:* the accuracy gate there is a KL divergence against stock logits. Any change of expert placement in the trainer would need the same gate.
+* **Later (author-stated):** a C++/CUDA trainer, only after the engine's results are in. No design is published.
 * **Open question (hypothesis, untested):** does this training path give a useful gain on very low-bit (1–3 bit) models? The inference engine cannot recover information those formats have already lost, so the training side is where any benefit would have to come from. Plan: a small side-by-side run once the 4-bit results are logged.
 * **Open question:** how much faster, and how accurate, is the v0.3 probe against the uncached one? Plan: time both on the same prompt and compare outputs token by token (the code already checks the second token).
 * **Planned:** a measurement of how fast the expert stream runs during training against the PCIe and RAM floors measured for the engine, using the same tools.
@@ -156,4 +163,5 @@ The author's rule: nothing is released until all testing for the current model i
 * **The author's own work.** The research, the design and the training experiments are the author's. The project began as a training problem (section 3.1) and led to the inference engine.
 * **Third-party code and libraries.** The trainer imports PyTorch, `transformers`, PEFT, Triton, `safetensors` and NumPy, and its export step uses llama.cpp (MIT). Their licence notices will be reproduced in `THIRD_PARTY_NOTICES.md` (still to be written); the licences found so far are in section 7, and PyTorch's and NumPy's are **not yet checked**. Every source, with its role, is in [`CITATIONS.md`](CITATIONS.md).
 * **Models.** The base is **Qwen3.6-35B-A3B** (Apache-2.0, checked 2026-10-20). The released base checkpoints were used only as starting points: the author's models, built for private use and not distributed, were trained and fine-tuned from this base, from the Gemma 4 family (26B A4B and 12B) and from Qwen3-Coder (exact names and versions **to be confirmed**; base-model licences **to be checked** before release). **No model weights, adapters or training data are part of this repository.**
-* **AI assistance.** Developed with the help of AI tools: Claude (Sonnet, Opus and Fable models, Anthropic), Gemini Pro and Gemini 4 Argon (Google; exact versions **to be confirmed**), used for coding, review, analysis and documentation. The author directed the work and ran the hardware tests. Which tool wrote which part is **not recorded**, so no per-file claim is made.
+* **Author and maintainer.** John Lipka. He owns and is responsible for what is published here, including the parts written with AI help.
+* **AI assistance.** Built with Claude (Anthropic) and Gemini (Google) as coding, review and writing assistants, under the author's direction. The author ran the hardware measurements.
