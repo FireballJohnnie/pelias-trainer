@@ -71,7 +71,7 @@ The aligner reports, on held-out text: **overlap** (expected acceptance when the
 | 4-bit build, Q4_K_M | 21,713,463,296 B (20.22 GiB), file dated 2026-10-20 01:08 | measured |
 | 5-bit build, Q5_K_M | 25,347,532,800 B (23.61 GiB), file dated 2026-10-20 00:49 | measured |
 | Disk to rebuild | the script checks for about 72 GB free (merge) and about 70 GB free (bf16 GGUF) | stated in the script, not re-measured |
-| Trainer version that made them | the author states the published (earlier) run used the 0.2 launcher with the 0.2.1 patch, applied on the fly in another conversation and so not named in its log, which says only "0.2"; the later run that made the GGUF files is, the author states, from what will become 0.3; its status file and per-step log are in `benchmarks/RESULTS.md` (section 2b) | **author-stated** |
+| Trainer version that made them | the author points to the archive `peliasv0.2.tar` (folder `pelias_v0.2`): its README title and `pelias/__init__.py` read 0.2.1 although the archive and folder are named v0.2 (**recorded**; its files are dated 2026-10-19, 01:52 to 03:11, before the earlier run started at 08:52); the author states the published (earlier) run used the 0.2 launcher with the 0.2.1 patch, applied on the fly in another conversation and so not named in its log, which says only "0.2"; the later run that made the GGUF files is, the author states, from what will become 0.3; its status file and per-step log are in `benchmarks/RESULTS.md` (section 2b) | **author-stated** |
 
 Speeds of these two files under stock llama.cpp, and the modelled ceilings with the engine, are in the pelias-engine README (section 4).
 
