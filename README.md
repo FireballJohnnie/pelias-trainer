@@ -4,7 +4,7 @@
 *Companion to [pelias-engine](https://github.com/FireballJohnnie/pelias-engine) (inference). The two meet at one interface: the GGUF file.*
 
 > **PRE-RELEASE DRAFT, 2026-10-20. Not published.**
-> This repository is private and holds a draft. This file describes what the code in the author's development folder does, as read from its own documentation and imports. **Numbers from logs are in [`benchmarks/RESULTS.md`](benchmarks/RESULTS.md)** (one training run with the 0.2 launcher, and the 4-bit and 5-bit GGUF files made from it); this file gives no training-speed, memory or accuracy number of its own. Sources, with their roles, are in [`CITATIONS.md`](CITATIONS.md).
+> This repository is private and holds a draft. This file describes what the code in the author's development folder does, as read from its own documentation and imports. **Numbers from logs are in [`benchmarks/RESULTS.md`](benchmarks/RESULTS.md)** (one earlier training run with the 0.2 launcher, and the export record and tests of the 4-bit and 5-bit GGUF files, which come from a later run whose own log is not published yet); this file gives no training-speed, memory or accuracy number of its own. Sources, with their roles, are in [`CITATIONS.md`](CITATIONS.md).
 > Every number in this file carries one label: **measured** (counted or run on the author's machine), **published** (vendor or standard specification), **derived** (arithmetic from labelled inputs), **estimate** (a guess, with the method to replace it), **author-stated** (the author told me; no log attached), **unmeasured** (with a planned way to measure it).
 > No "first ever" claim is made.
 
@@ -47,9 +47,9 @@ All of this is read from the code's own documentation; none of it has been re-ru
 
 | Part | What it is | Status |
 |---|---|---|
-| Pelias 0.2.1 package (`pelias/`, 10 modules) | quantiser, loader, streamer, expert compute, Triton dequant, data prep, trainer, shard merge | Written 2026-10-19. Its own README says it had **not yet been executed on the target PC** when written. The author states it is now **working but unfinished** (**author-stated**). One training run with the 0.2 launcher is logged in [`benchmarks/RESULTS.md`](benchmarks/RESULTS.md); that log does **not** record whether the package was 0.2 or 0.2.1. |
+| Pelias 0.2.1 package (`pelias/`, 10 modules) | quantiser, loader, streamer, expert compute, Triton dequant, data prep, trainer, shard merge | Written 2026-10-19. Its own README says it had **not yet been executed on the target PC** when written. The author states it is now **working but unfinished** (**author-stated**). One earlier training run with the 0.2 launcher is logged in [`benchmarks/RESULTS.md`](benchmarks/RESULTS.md); that log says only "0.2"; the author states the package was 0.2.1 and that its runs were still labelled "0.2" (**author-stated**). |
 | Pelias 0.1 package (15 files) and 0.1 launcher (1 script) | the same kinds of parts as 0.2 by the file lists, without 0.2's three flagged paths (8-bit resident layer 0, grouped matmul, fused Triton dequant) | Written 2026-10-19; its README and launcher say it had **not yet been run on the target PC** when written. **No benchmarks exist for it** (**author-stated**). The 0.2 files describe 0.2 as 0.1 plus three flagged paths; the author describes 0.1 as a **different path rather than an older version** (**author-stated**). |
-| 0.2 launcher (1 script) | runs the stages; refuses to run as root, checks the package archive's checksum, never overwrites | Has its own built-in checks. One run is logged in [`benchmarks/RESULTS.md`](benchmarks/RESULTS.md) (section 2). |
+| 0.2 launcher (1 script) | runs the stages; refuses to run as root, checks the package archive's checksum, never overwrites | Has its own built-in checks. One earlier run is logged in [`benchmarks/RESULTS.md`](benchmarks/RESULTS.md) (section 2). |
 | v0.3 patch layer (2 files) | the three adjustments above | Written; two on by default, one opt-in. One planned item (a "zero-sync routing plan") was **left out on purpose** after review found it could not work as drafted. Results not recorded here. |
 | MTP draft-head aligner (6 files) | trains a small LoRA on the draft head against the model's own outputs, dumps the hidden states it needs, merges and exports a draft GGUF | Has a numpy reference and a torch-free test path. **No acceptance-rate result is attached.** |
 | Tests (7 files, assigned by file name) | CPU-only checks, a fake torch for running the maths without torch | Not re-run for this draft. |
@@ -71,7 +71,7 @@ The aligner reports, on held-out text: **overlap** (expected acceptance when the
 | 4-bit build, Q4_K_M | 21,713,463,296 B (20.22 GiB), file dated 2026-10-20 01:08 | measured |
 | 5-bit build, Q5_K_M | 25,347,532,800 B (23.61 GiB), file dated 2026-10-20 00:49 | measured |
 | Disk to rebuild | the script checks for about 72 GB free (merge) and about 70 GB free (bf16 GGUF) | stated in the script, not re-measured |
-| Trainer version that made them | the author states 0.2.1 (inside the 0.2 archive); the archive is dated 2026-10-19, before both files; the run log names only the 0.2 launcher and records no package version | **author-stated** |
+| Trainer version that made them | the author states 0.2.1, and that runs made with it were still labelled "0.2" in their logs and file names, with the version shown only inside the package folder; the archive is dated 2026-10-19, before both files; the published run log is an earlier run and says only "0.2"; the later run's log is not published | **author-stated** |
 
 Speeds of these two files under stock llama.cpp, and the modelled ceilings with the engine, are in the pelias-engine README (section 4).
 
@@ -128,7 +128,7 @@ Never in the repository: model weights, trained adapters, datasets, identity or 
 
 The author's rule: nothing is released until all testing for the current model is complete. Then, for this repository:
 
-- [ ] Results ledger: **started** (one run, in `benchmarks/RESULTS.md`). Still open: accuracy against bf16, a run whose log records the package version, and the per-step log.
+- [ ] Results ledger: **started** (one earlier run and the export record, in `benchmarks/RESULTS.md`). Still open: the summary and per-step log of the later run that produced the GGUFs, accuracy against bf16, and a log that records the package version.
 - [ ] Run the v0.3 adjustments and the aligner end to end, and record the draft-head acceptance (overlap, agree) before and after.
 - [ ] Restructure the launcher: today it loads a checksummed archive; a normal package layout is easier to install and review.
 - [ ] Scrub: hard-coded drive-letter and `/mnt/...` paths, project-private names in file names, comments and default folder names, and a fresh secret scan. Start a **fresh git history**.

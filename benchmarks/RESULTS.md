@@ -1,6 +1,6 @@
 # Results ledger (trainer)
 
-**Status: pre-release, private.** This page ties each number below to the log it came from, with a label. It covers **one training run** with the Pelias 0.2 launcher, the **4-bit and 5-bit GGUF files** made from it, and the tests those two files have had so far. It is not a speed comparison with other trainers, and it is not a quality claim.
+**Status: pre-release, private.** This page ties each number below to the log it came from, with a label. It covers **one earlier training run** with the Pelias 0.2 launcher (section 2), the **4-bit and 5-bit GGUF files** (sections 3 and 4), and the tests those two files have had so far. **The GGUF files were made from a later run, not from the run in section 2**; that later run's own log is not published yet (section 1). It is not a speed comparison with other trainers, and it is not a quality claim.
 
 | Label | Meaning |
 |---|---|
@@ -19,14 +19,17 @@ Machine: Ryzen 7 5800X3D, RTX 4070 12 GB, Windows 11 with WSL2 (Ubuntu 26.04.1 L
 
 | Question | Answer |
 |---|---|
-| Which trainer produced the run? | The **Pelias 0.2 launcher** (the verifier names it). The author states the package inside was **0.2.1** (**author-stated**); the run log records only the launcher name, not the package version. |
+| Which run made the GGUF files? | A **later run**, started 15:50 on 2026-10-19. The export record names a "phase-2" adapter (310 modules, 21,166,080 parameters), and the author's RUNBOOK says that adapter was saved from that later run's folder (**recorded**). Its summary and per-step log are inside WSL and **not in this repository yet**. The run in section 2 started at 08:52 the same day and is a different run. |
+| Which trainer produced the run in section 2? | The **Pelias 0.2 launcher** (the checker names it). The log says only "0.2". The author states the GGUFs were made with package **0.2.1**, and that runs made with 0.2.1 were still labelled "0.2" in their logs and file names, with the version shown only inside the package folder (**author-stated**). A log that reads "0.2" therefore does not contradict 0.2.1. |
 | Pelias 0.1? | No benchmarks exist for it (author-stated). |
 | 5-bit and 4-bit GGUF? | Yes: `Q5_K_M` and `Q4_K_M`, section 3 and 4. |
 | 3-bit GGUF? | **None.** No 3-bit file or log was found; the logs here cover 4-bit and 5-bit files only. |
 
 ---
 
-## 2. The training run (measured)
+## 2. An earlier training run (measured)
+
+This run is **not** the one that produced the GGUF files in sections 3 and 4 (see section 1).
 
 Raw: `raw/training-run-0.2/results_pelias02.json` (summary) and `raw/training-run-0.2/verification_pelias02.json` (the checker's output). Run date 2026-10-19.
 
@@ -64,7 +67,7 @@ The checker's own verdict, unchanged: `VERDICT: NOT COMPLETE AND SOUND (2 FAIL, 
 
 ## 3. The 4-bit and 5-bit GGUF files (recorded)
 
-Raw: `raw/gguf-export/export_record.md`, dated 2026-10-19. It records what was produced and was written **before** any server had loaded the files.
+Raw: `raw/gguf-export/export_record.md`, dated 2026-10-19. It records what was produced and was written **before** any server had loaded the files. The adapter it merged is the phase-2 adapter, from the later run (section 1), not the run in section 2.
 
 | File (name replaced by `test-model`) | Bytes | Size | Bits per weight | Quantise time | sha256 |
 |---|---|---|---|---|---|
@@ -120,9 +123,10 @@ The program that ran these keeps every reply in its log and the log is marked pr
 | Whether the expert stream is near the PCIe and RAM floors during training | time the stream alone, compare with the engine's measured floors |
 | Effect of the v0.3 adjustments (peak-VRAM guard, cached probe, layer-input offload) | run with each switch off and on, same data |
 | MTP draft-head overlap and agreement before and after alignment | run the aligner end to end and log its metrics |
-| A log that records the package version (the author states 0.2.1) | look for a version banner in the run folder's status file, or repeat a run and save the banner |
+| The version text inside the package folder (the author states it says 0.2.1 while the logs say 0.2) | copy that version text next to each run's log, or repeat a run and save the banner |
 | 3-bit files | quantise a 3-bit file from the bf16 file, then repeat sections 4.1 and 4.2 |
-| The per-step log of this run | `run.metrics.jsonl` (237 KiB, 616 rows) and `status.txt` (75 KiB) are present on the author's machine per the checker, in the run folder; **not in repo yet** |
+| The per-step log of the run in section 2 | `run.metrics.jsonl` (237 KiB, 616 rows) and `status.txt` (75 KiB) are present on the author's machine per the checker, in that run's folder inside WSL; **not in repo yet** |
+| Summary, per-step log and version banner of the later run that made the GGUF files | inside WSL; copy out, redact the same way, and add under `raw/` |
 
 ---
 
