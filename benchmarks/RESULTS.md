@@ -7,6 +7,7 @@
 | **measured** | Printed by a run or a checker; the log is in `raw/` (redacted copy). |
 | **derived** | Arithmetic on measured numbers; the arithmetic is shown. |
 | **recorded** | Taken from the project's written export record (made during the export), not from a program's output. |
+| **author-stated** | The author says so; no log records it. |
 | **not in repo yet** | Exists on the author's machine, or is described by a log, but the file is not in this repository. |
 | **unmeasured** | Not run. Each has a path to a number at the end. |
 
@@ -18,7 +19,7 @@ Machine: Ryzen 7 5800X3D, RTX 4070 12 GB, Windows 11 with WSL2 (Ubuntu 26.04.1 L
 
 | Question | Answer |
 |---|---|
-| Which trainer produced the run? | The **Pelias 0.2 launcher** (the verifier names it). The log does **not** record whether the package inside was 0.2 or the 0.2.1 patch. No separate 0.2.1 log has been found. |
+| Which trainer produced the run? | The **Pelias 0.2 launcher** (the verifier names it). The author states the package inside was **0.2.1** (**author-stated**); the run log records only the launcher name, not the package version. |
 | Pelias 0.1? | No benchmarks exist for it (author-stated). |
 | 5-bit and 4-bit GGUF? | Yes: `Q5_K_M` and `Q4_K_M`, section 3 and 4. |
 | 3-bit GGUF? | **None.** No 3-bit file or log was found; the logs here cover 4-bit and 5-bit files only. |
@@ -119,7 +120,7 @@ The program that ran these keeps every reply in its log and the log is marked pr
 | Whether the expert stream is near the PCIe and RAM floors during training | time the stream alone, compare with the engine's measured floors |
 | Effect of the v0.3 adjustments (peak-VRAM guard, cached probe, layer-input offload) | run with each switch off and on, same data |
 | MTP draft-head overlap and agreement before and after alignment | run the aligner end to end and log its metrics |
-| A run with the 0.2.1 patch | find or repeat a run whose log records the package version |
+| A log that records the package version (the author states 0.2.1) | look for a version banner in the run folder's status file, or repeat a run and save the banner |
 | 3-bit files | quantise a 3-bit file from the bf16 file, then repeat sections 4.1 and 4.2 |
 | The per-step log of this run | `run.metrics.jsonl` (237 KiB, 616 rows) and `status.txt` (75 KiB) are present on the author's machine per the checker, in the run folder; **not in repo yet** |
 

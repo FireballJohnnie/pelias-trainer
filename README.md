@@ -71,7 +71,7 @@ The aligner reports, on held-out text: **overlap** (expected acceptance when the
 | 4-bit build, Q4_K_M | 21,713,463,296 B (20.22 GiB), file dated 2026-10-20 01:08 | measured |
 | 5-bit build, Q5_K_M | 25,347,532,800 B (23.61 GiB), file dated 2026-10-20 00:49 | measured |
 | Disk to rebuild | the script checks for about 72 GB free (merge) and about 70 GB free (bf16 GGUF) | stated in the script, not re-measured |
-| Trainer version that made them | the author recalls 0.2.1 (inside the 0.2 archive); the archive is dated 2026-10-19, before both files; **no log is attached** | author-stated, **unverified** |
+| Trainer version that made them | the author states 0.2.1 (inside the 0.2 archive); the archive is dated 2026-10-19, before both files; the run log names only the 0.2 launcher and records no package version | **author-stated** |
 
 Speeds of these two files under stock llama.cpp, and the modelled ceilings with the engine, are in the pelias-engine README (section 4).
 
