@@ -1,6 +1,6 @@
 # Results ledger (trainer)
 
-**Status: pre-release, private.** This page ties each number below to the log it came from, with a label. It covers **one earlier training run** with the Pelias 0.2 launcher (section 2), the **4-bit and 5-bit GGUF files** (sections 3 and 4), and the tests those two files have had so far. **The GGUF files were made from a later run, not from the run in section 2**; that later run's own log is not published yet (section 1). It is not a speed comparison with other trainers, and it is not a quality claim.
+**Status: pre-release, private.** This page ties each number below to the log it came from, with a label. It covers **two training runs**: an earlier one with the Pelias 0.2 launcher (section 2) and the later one that made the GGUF files (section 2b), then the **4-bit and 5-bit GGUF files** (section 3) and the tests those two files have had so far (section 4). **The GGUF files were made from the later run, not from the run in section 2** (section 1). It is not a speed comparison with other trainers, and it is not a quality claim.
 
 | Label | Meaning |
 |---|---|
@@ -19,7 +19,7 @@ Machine: Ryzen 7 5800X3D, RTX 4070 12 GB, Windows 11 with WSL2 (Ubuntu 26.04.1 L
 
 | Question | Answer |
 |---|---|
-| Which run made the GGUF files? | A **later run**, started 15:50 on 2026-10-19. The export record names a "phase-2" adapter (310 modules, 21,166,080 parameters), and the author's RUNBOOK says that adapter was saved from that later run's folder (**recorded**). Its summary and per-step log are inside WSL and **not in this repository yet**. The run in section 2 started at 08:52 the same day and is a different run. The author states the later run's logs come from what will become **0.3** (**author-stated**). |
+| Which run made the GGUF files? | A **later run**, started 15:50 on 2026-10-19. The export record names a "phase-2" adapter (310 modules, 21,166,080 parameters), and the author's RUNBOOK says that adapter was saved from that later run's folder (**recorded**). Its status file and per-step log are in section 2b; no summary file or checker output for it is in this repository yet. The run in section 2 started at 08:52 the same day and is a different run. The author states the later run's logs come from what will become **0.3** (**author-stated**). |
 | Which trainer produced the run in section 2? | The **Pelias 0.2 launcher** (the checker names it). The log says only "0.2". The author states the run used the 0.2 launcher with the **0.2.1 patch**, applied on the fly in another conversation and so not named in the log (**author-stated**). A log that reads "0.2" therefore does not contradict 0.2.1. |
 | Pelias 0.1? | No benchmarks exist for it (author-stated). |
 | 5-bit and 4-bit GGUF? | Yes: `Q5_K_M` and `Q4_K_M`, section 3 and 4. |
@@ -62,6 +62,32 @@ The checker's own verdict, unchanged: `VERDICT: NOT COMPLETE AND SOUND (2 FAIL, 
 
 * **22 of the 24 passes and all INFO lines** cover the run itself: the log is present and has a `[done]` line, no traceback or out-of-memory text, steps contiguous, loss fell, evaluation loss fell, VRAM and RAM and swap within limits, the adapter is complete with every module paired, no expert LoRA, and no row over the length limit.
 * **The 2 FAILs and 2 further PASSes are four post-run reply checks** of the fine-tuned private model. Two of the four failed. The prompts and replies are withheld (they are about the private model), and the file shows one `WITHHELD` row in their place. So the verdict stays as printed: the run is mechanically sound by the other 22 checks, and the model failed half of its four reply checks.
+
+## 2b. The later training run, which made the GGUF files (measured)
+
+Raw: `raw/training-run-second-phase/status.txt` (the run's status file, 123 lines) and `raw/training-run-second-phase/metrics.jsonl` (one row per step, 114 rows). Run date 2026-10-19, started 15:50. The status file's last line says the adapter was saved to this run's `final` folder; the author's RUNBOOK says the phase-2 adapter used for the GGUF files was copied from there (**recorded**). No summary file or checker output for this run is in this repository.
+
+| Quantity | Value |
+|---|---|
+| Optimizer steps | 114, numbered 1 to 114 with no gaps; every value in the per-step log is finite |
+| Wall time | 37.9 min (the `[done]` line) |
+| Data (counts only; private) | 225 train rows and 56 evaluation rows; the log's `max_len` is 7038 |
+| Settings printed by the log | 5 warm-up steps, gradient accumulation 4, token budget 8,192; learning rate peaks at 5e-05 (per-step column) |
+| Trainable parameters | 21,166,080, the same count as the adapter in section 2 (**derived** by comparing the two logs) |
+| Start | the log says it resumed from an `init` folder at step 0; what that folder held is not recorded in the log |
+| Training loss | step 1: 2.0792; step 114: 0.235; mean of the first 10 steps 0.847 and of the last 10 steps 0.355 (**derived**) |
+| Evaluation loss | 0.3779 (step 25), 0.2579 (step 50), 0.2261 (step 75), 0.2089 (step 100); four evaluations |
+| Largest gradient norm | 8.96 (step 2); 113 of the 114 steps are above 1.0 |
+| Tokens per step | median 228 (lowest 51, highest 6,918) |
+| Throughput, median (p10 to p90) | 56.45 tok/s (17.9 to 364.7) (**derived** from the per-step column) |
+| `sec_micro`, median (lowest to highest) | 4.02 s (3.53 to 8.90) |
+| Expert stream per logged step | 30.38 GiB in 72 fetches on every step; `stream_wait_s` 1.23 to 1.25 s (median 1.24) |
+| Peak allocated VRAM | 9.36 GiB (reserved, at most 9.86 GiB) |
+| Highest GPU memory seen by `nvidia-smi` | 10,844 MiB of 12,282 MiB |
+| Process RAM, swap | 19.9 GiB; swap 0.0 GiB |
+| Package version | **not recorded**: the status file starts at its `[data]` line and has no version banner |
+
+**Read these numbers carefully.** Throughput here is the tokens in a step divided by its time, and the expert stream is the same size on every step, so the figure moves with how long the rows are (the median step has 228 tokens). It is not comparable with the 247.85 tok/s in section 2, which used different data, and this page makes no speed comparison between the two runs. Single-step losses swing widely (0.0296 at step 13, 2.0792 at step 1). The evaluation loss is on 56 rows. None of this says anything about quality; the quality checks are in section 4.
 
 ---
 
@@ -126,7 +152,7 @@ The program that ran these keeps every reply in its log and the log is marked pr
 | A record of the package version for each run (the author states: section 2 run = 0.2 plus the 0.2.1 patch; later run = what will become 0.3) | copy the package folder's version text next to each run's log, or repeat a run and save the banner |
 | 3-bit files | quantise a 3-bit file from the bf16 file, then repeat sections 4.1 and 4.2 |
 | The per-step log of the run in section 2 | `run.metrics.jsonl` (237 KiB, 616 rows) and `status.txt` (75 KiB) are present on the author's machine per the checker, in that run's folder inside WSL; **not in repo yet** |
-| Summary, per-step log and version banner of the later run that made the GGUF files | inside WSL; copy out, redact the same way, and add under `raw/` |
+| Summary file and checker output for the later run (section 2b) | none found in the logs folder; run the same checker on that run's folder |
 
 ---
 
@@ -134,5 +160,6 @@ The program that ran these keeps every reply in its log and the log is marked pr
 
 * Local paths, the launcher's file name and the model's file name were replaced (`<engine-home>`, `<hf-cache>`, `<launcher-0.2>`, `test-model`). One build-host identifier was removed from the kernel string. JSON files were re-written with indentation; no number was changed.
 * In `verification_pelias02.json` the four reply-check rows are replaced by one `WITHHELD` row. The verdict line and counts are untouched.
+* In `raw/training-run-second-phase/status.txt` the run-folder path (2 places) was replaced by `<run-folder>`; `metrics.jsonl` is unchanged.
 * In `export_record.md` one word was removed from a sentence in the list of unverified items (the sentence is otherwise unchanged).
 * The model files, adapter, training data and the private model's replies are not in this repository.
