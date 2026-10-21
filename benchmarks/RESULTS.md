@@ -19,8 +19,8 @@ Machine: Ryzen 7 5800X3D, RTX 4070 12 GB, Windows 11 with WSL2 (Ubuntu 26.04.1 L
 
 | Question | Answer |
 |---|---|
-| Which run made the GGUF files? | A **later run**, started 15:50 on 2026-10-19. The export record names a "phase-2" adapter (310 modules, 21,166,080 parameters), and the author's RUNBOOK says that adapter was saved from that later run's folder (**recorded**). Its summary and per-step log are inside WSL and **not in this repository yet**. The run in section 2 started at 08:52 the same day and is a different run. |
-| Which trainer produced the run in section 2? | The **Pelias 0.2 launcher** (the checker names it). The log says only "0.2". The author states the GGUFs were made with package **0.2.1**, and that runs made with 0.2.1 were still labelled "0.2" in their logs and file names, with the version shown only inside the package folder (**author-stated**). A log that reads "0.2" therefore does not contradict 0.2.1. |
+| Which run made the GGUF files? | A **later run**, started 15:50 on 2026-10-19. The export record names a "phase-2" adapter (310 modules, 21,166,080 parameters), and the author's RUNBOOK says that adapter was saved from that later run's folder (**recorded**). Its summary and per-step log are inside WSL and **not in this repository yet**. The run in section 2 started at 08:52 the same day and is a different run. The author states the later run's logs come from what will become **0.3** (**author-stated**). |
+| Which trainer produced the run in section 2? | The **Pelias 0.2 launcher** (the checker names it). The log says only "0.2". The author states the run used the 0.2 launcher with the **0.2.1 patch**, applied on the fly in another conversation and so not named in the log (**author-stated**). A log that reads "0.2" therefore does not contradict 0.2.1. |
 | Pelias 0.1? | No benchmarks exist for it (author-stated). |
 | 5-bit and 4-bit GGUF? | Yes: `Q5_K_M` and `Q4_K_M`, section 3 and 4. |
 | 3-bit GGUF? | **None.** No 3-bit file or log was found; the logs here cover 4-bit and 5-bit files only. |
@@ -123,7 +123,7 @@ The program that ran these keeps every reply in its log and the log is marked pr
 | Whether the expert stream is near the PCIe and RAM floors during training | time the stream alone, compare with the engine's measured floors |
 | Effect of the v0.3 adjustments (peak-VRAM guard, cached probe, layer-input offload) | run with each switch off and on, same data |
 | MTP draft-head overlap and agreement before and after alignment | run the aligner end to end and log its metrics |
-| The version text inside the package folder (the author states it says 0.2.1 while the logs say 0.2) | copy that version text next to each run's log, or repeat a run and save the banner |
+| A record of the package version for each run (the author states: section 2 run = 0.2 plus the 0.2.1 patch; later run = what will become 0.3) | copy the package folder's version text next to each run's log, or repeat a run and save the banner |
 | 3-bit files | quantise a 3-bit file from the bf16 file, then repeat sections 4.1 and 4.2 |
 | The per-step log of the run in section 2 | `run.metrics.jsonl` (237 KiB, 616 rows) and `status.txt` (75 KiB) are present on the author's machine per the checker, in that run's folder inside WSL; **not in repo yet** |
 | Summary, per-step log and version banner of the later run that made the GGUF files | inside WSL; copy out, redact the same way, and add under `raw/` |
