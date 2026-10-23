@@ -65,6 +65,7 @@ Model weights, trained adapters, training data, personal identity or system-prom
 | The technical overview of what exists | [`README.md`](README.md) |
 | The measured results of the two training runs and the export | [`benchmarks/RESULTS.md`](benchmarks/RESULTS.md) |
 | The full plan for the C++/CUDA rebuild, with its tests | [`docs/PELIAS_TRAINER_CUDA_MASTER_SCAFFOLD.md`](docs/PELIAS_TRAINER_CUDA_MASTER_SCAFFOLD.md) |
+| How each number in the plan was worked out, what depends on what, and what is still needed | [`docs/PELIAS_TRAINER_MASTER_NOTES.md`](docs/PELIAS_TRAINER_MASTER_NOTES.md) |
 | Sources and licences | [`CITATIONS.md`](CITATIONS.md) and section 7 of `README.md` |
 | The companion inference engine | [pelias-engine](https://github.com/FireballJohnnie/pelias-engine) |
 
