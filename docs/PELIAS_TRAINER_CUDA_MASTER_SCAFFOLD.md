@@ -2010,6 +2010,9 @@ The report was produced by another AI system from the engine blueprint and the a
 | G13 | Gate thresholds (≥ 22 / ≥ 25 GB/s zero-copy; ≥ 27 GB/s cold; handoff p99 ≤ 12 µs native) and the calendar | Invented by the report; the engine blueprint has its own gates and the author sets the dates | **Not adopted** | Candidate gates may be set after the E0/E1 floors |
 | G14 | RTX 4070: 46 SMs, 5,888 cores, 192-bit bus, 504 GB/s, 36 MB L2, compute capability 8.9 | Consistent with published AD104 data and with this document's 2.1 | **Consistent** | — |
 | G15 | Pinned host memory capped at ≤ 32 GB | X13 | **Unverified** | E11 / P-H7 |
+| G16 | WSL2 runs at 44–54 tok/s short and 43–49 at 12k | Engine ledger §8.2: 53.5 / 53.0 / 49.0 tok/s with the 7.5 GiB set, bypass 32, `-ub 2048`. The reference cell A (7.0 GiB, bypass 32, `-ub 4096`, timer off) gives 37.9 / 42.1 | **Supported for the best recorded cell, not for the reference cell** | 16.4.1 (row added). The 5.1–5.2 ms Windows–WSL difference is a like-for-like figure on the reference cell only |
+| G17 | The `/dev/dxg` VMBus costs 25–35 µs per layer (1.0–1.4 ms per token) and explains why Windows is faster | Arithmetic: 1.0–1.4 ms is 19–27 % of the 5.1–5.2 ms measured difference on the reference cell. The 57.0 baseline it explains is itself unsupported (G1) | **Unmeasured; at most a fifth to a quarter of the measured gap** | Engine handoff probe (the ledger has 94 µs sync against 13.3 µs resident-doorbell handoff on WSL) |
+| G18 | Windows-native: pin workers to physical cores, turn off power throttling (`SetThreadInformation`), `timeBeginPeriod(1)`, to cut launch-to-launch spread (stated as 5–21 %) | The calls exist as documented; the spread figure was not checked against the ledger here; no Windows-native thread-pinning run exists | **Hypothesis, Windows-native only** | Engine, only if Windows-native is adopted (decision 4 in 16.7) |
 
 #### 16.4.1 The gap to the ceiling, recomputed from the recorded runs
 
@@ -2021,9 +2024,12 @@ The ceiling model gives 10.87 ms per token (92.0 tok/s) with the checksum-rate G
 | WSL cell A, 12k | 42.1 | 23.75 | 12.4–12.9 ms | 310–322 |
 | Windows-native r1 / r2, short | 47.3 / 46.8 | 21.14 / 21.37 | 9.8–10.5 ms | 245–262 |
 | Windows-native r1 / r2, 12k | 53.7 / 54.1 | 18.62 / 18.48 | 7.2–7.8 ms | 179–194 |
+| WSL best recorded cell (ledger §8.2: 7.5 GiB set, bypass 32, `-ub 2048`), short / 4k / 12k | 53.5 / 53.0 / 49.0 | 18.69 / 18.87 / 20.41 | 7.4–9.5 ms (7.35–7.82 for the short run, 9.07–9.54 for the 12k run) | 184–239 |
 | *(the report's figure, for comparison)* | *57.0* | *17.54* | *6.2–6.7 ms* | *155–167* |
 
-The Windows–WSL difference is 5.1–5.2 ms per token at both depths (DERIVED), about the engine's measured timer-free sync-and-copy handoff on WSL (≥ 4.6–5.0 ms). The ledger notes that three launches per side are still needed, so this is a consistent pattern, not a result. If the author has a newer Windows run than those in the repository, it should be added to the ledger with its raw file before it is used anywhere.
+The §8.2 row uses the same ceiling as the others; that ceiling was not recomputed for a 7.5 GiB set. The §8.2 speeds come from the gauntlet run (ledger §8.2), the other rows from the author's streaming client (ledger §9.2); two measuring clients were used, so comparisons across that line are indicative, not exact (DERIVED, caveats).
+
+The Windows–WSL difference is 5.1–5.2 ms per token at both depths (DERIVED), about the engine's measured timer-free sync-and-copy handoff on WSL (≥ 4.6–5.0 ms). That difference is measured on the reference cell only. On WSL, the §8.2 cell's short-context run (53.5) is 15.6 tok/s above the reference cell's (37.9), more than the whole Windows–WSL difference on the reference cell (47.3 against 37.9), so the cell's settings appear to matter more than the operating system. At 12k the order is different: Windows reference cell 53.7 / 54.1 against WSL §8.2 49.0. Windows-native has not been run in the §8.2 configuration, and the two sets used different measuring clients, so the OS effect at equal settings is unmeasured (DERIVED comparison of recorded runs). The ledger notes that three launches per side are still needed, so this is a consistent pattern, not a result. If the author has a newer Windows run than those in the repository, it should be added to the ledger with its raw file before it is used anywhere.
 
 ### 16.5 The bridges
 
