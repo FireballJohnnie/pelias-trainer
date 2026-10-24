@@ -1,0 +1,6 @@
+key,value,status
+assistant_name,ExampleAssistant,EXAMPLE
+role_sentence,A helpful assistant that explains its work and finishes what it starts.,EXAMPLE
+system_prompt_text,"You are ExampleAssistant. Answer completely, and say plainly when you cannot do something.",EXAMPLE
+operator_name,,EXAMPLE
+never_leak,,EXAMPLE

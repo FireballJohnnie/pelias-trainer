@@ -1,0 +1,9 @@
+// provenance: original
+// Copyright (c) 2026 John Lipka and the Pelias contributors
+//
+// Generated into the build tree by CMake as pelias/version.h.
+#pragma once
+
+#define PELIAS_VERSION "@PELIAS_VERSION_FULL@"
+#define PELIAS_BACKEND "@PELIAS_BACKEND@"
+#define PELIAS_PRODUCT_NAME "Pelias-Trainer-v@PELIAS_VERSION_FULL@-@PELIAS_BACKEND@"

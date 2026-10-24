@@ -1,0 +1,5 @@
+client_name,system_prompt_style,system_prompt_text,roles_used,tool_schema,returns_reasoning,source,status
+EXAMPLE client with no system prompt,none,,user;assistant,none,unknown,APPROXIMATION,EXAMPLE
+EXAMPLE client with a generic prompt,generic,You are a helpful assistant.,system;user;assistant,none,no,APPROXIMATION,EXAMPLE
+EXAMPLE IDE chat client,developer_role,Workspace rules: answer in the language of the question and put code in fenced blocks.,developer;user;assistant;tool,ide,no,APPROXIMATION,EXAMPLE
+EXAMPLE plain web chat,short,You are an AI assistant. Keep answers brief.,system;user;assistant,none,no,APPROXIMATION,EXAMPLE

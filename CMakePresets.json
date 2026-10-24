@@ -1,0 +1,115 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 28,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "base",
+      "hidden": true,
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/${presetName}"
+    },
+    {
+      "name": "host-only",
+      "inherits": "base",
+      "displayName": "Host only (no CUDA; checks the framework without a GPU)",
+      "cacheVariables": {
+        "PELIAS_CUDA": "OFF",
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
+    },
+    {
+      "name": "wsl-release",
+      "inherits": "base",
+      "displayName": "WSL2 / Linux, CUDA, Release",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Linux"
+      },
+      "cacheVariables": {
+        "PELIAS_CUDA": "ON",
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    },
+    {
+      "name": "wsl-debug",
+      "inherits": "base",
+      "displayName": "WSL2 / Linux, CUDA, Debug",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Linux"
+      },
+      "cacheVariables": {
+        "PELIAS_CUDA": "ON",
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
+    },
+    {
+      "name": "windows-release",
+      "inherits": "base",
+      "displayName": "Windows-native, CUDA, Release (run from the x64 Native Tools prompt)",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Windows"
+      },
+      "cacheVariables": {
+        "PELIAS_CUDA": "ON",
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "host-only",
+      "configurePreset": "host-only"
+    },
+    {
+      "name": "wsl-release",
+      "configurePreset": "wsl-release"
+    },
+    {
+      "name": "wsl-debug",
+      "configurePreset": "wsl-debug"
+    },
+    {
+      "name": "windows-release",
+      "configurePreset": "windows-release"
+    }
+  ],
+  "testPresets": [
+    {
+      "name": "host-only",
+      "configurePreset": "host-only",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "wsl-release",
+      "configurePreset": "wsl-release",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "wsl-debug",
+      "configurePreset": "wsl-debug",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "windows-release",
+      "configurePreset": "windows-release",
+      "output": {
+        "outputOnFailure": true
+      }
+    }
+  ]
+}

@@ -1,0 +1,10 @@
+id,name,tier,description,answer_kind,answer,language,depends_on,status
+1,EXAMPLE_GREETING_STYLE,Tier 1: Basics,Greets the user by name and offers help in one sentence.,text,"Hello, Sam. What would you like to work on today?",,,EXAMPLE
+2,EXAMPLE_SLUGIFY,Tier 1: Basics,"Turns a title into a lowercase, dash-separated slug.",code,"def slugify(title: str) -> str:
+    words = """".join(c.lower() if c.isalnum() else "" "" for c in title).split()
+    return ""-"".join(words)
+",python,,EXAMPLE
+3,EXAMPLE_SLUG_CHECK,Tier 1: Basics,Checks that a slug is lowercase and has no spaces.,code,"def is_slug(text: str) -> bool:
+    return bool(text) and text == text.lower() and "" "" not in text
+",python,2,EXAMPLE
+4,EXAMPLE_NO_ANSWER,Tier 2: Notes,A rule the model should know about but is not asked to write code for.,none,,,,EXAMPLE

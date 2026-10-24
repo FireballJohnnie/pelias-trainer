@@ -1,0 +1,25 @@
+# provenance: original
+# Copyright (c) 2026 John Lipka and the Pelias contributors
+#
+# One static library per module (pelias_<module>), then the command-line program.
+add_subdirectory(hal)
+add_subdirectory(tok)
+add_subdirectory(io)
+add_subdirectory(plan)
+add_subdirectory(data)
+add_subdirectory(model)
+add_subdirectory(stream)
+add_subdirectory(kern)
+add_subdirectory(sched)
+add_subdirectory(train)
+add_subdirectory(export)
+add_subdirectory(verify)
+add_subdirectory(project)
+add_subdirectory(startup)
+add_subdirectory(intake)
+add_subdirectory(help)
+add_subdirectory(warn)
+add_subdirectory(flow)
+add_subdirectory(serve)
+add_subdirectory(ui)
+add_subdirectory(cli)

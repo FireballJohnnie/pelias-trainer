@@ -1,0 +1,13 @@
+# Example entries only. Real entries are written when the step they belong to exists.
+
+[vram_ceiling]
+short:  The most graphics-card memory this run is allowed to use.
+plain:  Windows and other programs already use part of your card's memory. The program measures what is really free each time it starts and keeps a safety gap, so training does not stop for lack of memory.
+detail: The smaller of CUDA free and NVML free after the CUDA context exists, minus a margin. Expert mode can replace it; the measured value is then shown next to the forced one.
+see:    master 3.3, U2
+
+[trial_run]
+short:  A very short practice run that checks everything works before the long one.
+plain:  It uses a few steps only. It shows how fast your machine goes and how much memory the real run will need, so you can decide before spending hours.
+detail: A smoke stage on the longest samples first, reporting the peak memory and the time per step; the result decides whether the real run is offered.
+see:    master 3.3, U10
