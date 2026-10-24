@@ -12,7 +12,7 @@ The product name is `Pelias-Trainer-v<VERSION>-<backend>`, for example `Pelias-T
 |---|---|---|---|
 | `hal` | yes | none | Device selection, stream/event wrappers, arena allocator, pinned pool, VRAM governor, sync audit. |
 | `config` | yes | none | The one configuration struct and its defaults: Mode Q at the served types, no extra bytes, type raises off, planner automatic; overrides only in Advanced/Developer (master D31, D32, D34). |
-| `tok` | yes | none | Tokenizes and renders exactly like the server (wraps libllama / common). |
+| `tok` | yes | none | Tokenizes and renders exactly like the server; own code, no libllama (master D37). |
 | `io` | yes | hal | Memory-maps the GGUF, typed block views, splice writer, SHA-256, safetensors interchange. |
 | `ingest` | yes | io, config | Stage A: the original bf16 safetensors to the cached `pelias_base_0step.gguf` (master D33). So far only the plan and its checks are written; the conversion and the quantizer are not. |
 | `plan` | yes | hal | Reads the probe constants, solves the plan, prints it before any allocation. |
