@@ -5,8 +5,8 @@
 
 | | |
 |---|---|
-| Date | 2026-10-23 |
-| Status | **Design only. No trainer code exists and nothing here was run on the GPU.** The numbers below come from reading files, reading source, running the engine project's logged results through arithmetic, and one analysis of the engine's routing trace (P-E1). |
+| Date | 2026-10-23; hardware results and the 10.7 GiB ceiling folded in 2026-10-24 |
+| Status | **Design, plus the Wave 0 hardware measurements. No trainer code exists.** The hardware probes were run on the GPU on 2026-10-23/24 (WSL2 and Windows-native); section 1.18 records what they found and master 11.12 holds the table. The other numbers come from reading files, reading source, running the engine project's logged results through arithmetic, and one analysis of the engine's routing trace (P-E1). |
 | Draft | Written quickly from the master. Section 3 (what is needed) is the part to act on. |
 | Copyright | Copyright (c) 2026 John Lipka and the Pelias contributors |
 
@@ -44,19 +44,19 @@ Each entry: **finding** · **how it was derived** · **label** · **what depends
 * **Label.** DERIVED. **Depends on it:** the VRAM headroom (1.6). **Master:** 4.4, 9.4, Appendix E.
 
 ### 1.6 How much room the core really has next to the engine's bank
-* **Finding.** The VRAM ceiling is 10.9 GiB. With the engine's 7.5 GiB expert bank, its measured peaks are 10.40–10.44 GiB at the default prefill micro-batch and 10.67–10.69 GiB at `-ub 2048`. With a 0.1 GiB safety margin, the room for any extra core bytes is **0.36 GiB** (default) or about **0.11 GiB** (`-ub 2048`). A bank of 8.0 GiB does not fit at all (peaks 11.0–11.19 GiB).
-* **Derived by.** Ceiling − margin − measured peak. This corrected an earlier statement in the work that quoted only the larger figure.
+* **Finding.** The VRAM ceiling is 10.7 GiB (author ruling 2026-10-23; it was 10.9). With the engine's 7.5 GiB expert bank, its measured whole-card peaks are 10.40–10.44 GiB at the default prefill micro-batch and 10.67–10.69 GiB at `-ub 2048`. With a 0.1 GiB safety margin, the room for any extra core bytes is **0.16 GiB** (default) or **none** (`-ub 2048`, −0.09 GiB); at 10.9 it was 0.36 and about 0.11 GiB. A bank of 8.0 GiB does not fit at all (peaks 11.0–11.19 GiB). **This holds only if the ceiling is read the way the engine's peaks are measured (the whole card, Windows' share included).** Read as a limit on the process's own allocations (how the probe P-H8 and the governor's plan sum see it), the same peaks leave about 1.2 / 0.9 GiB (see 1.18, master 16.3.1 and decision 7).
+* **Derived by.** Ceiling − margin − measured peak. This corrected an earlier statement in the work that quoted only the larger figure. For the process-only reading the ≈ 1.0 GiB that Windows already holds before the process starts (0.89 / 1.01 GiB, NVML, WSL2 / Windows-native runs) is subtracted from the peaks first.
 * **Label.** DERIVED from the engine's MEASURED peaks. The engine's own allocator may differ: P-E4 re-measures it. **Depends on it:** which core types are allowed, so the export. **Master:** 2.7, 4.3, 9.4, 16.3.1.
 
 ### 1.7 The expert stream costs a fixed amount per step, so batch size hides it
-* **Finding.** The frozen experts are 19,503,513,600 B (18.164 GiB). They are streamed twice per optimizer step (forward, then backward). At the measured 26.1 GB/s that is **1.49 s per step regardless of how many tokens the step holds**. The transfer is hidden behind compute once a step holds at least about 1,495 / 2,242 / 2,989 tokens when compute runs at 1,000 / 1,500 / 2,000 tokens/s.
+* **Finding.** The frozen experts are 19,503,513,600 B (18.164 GiB). They are streamed twice per optimizer step (forward, then backward). At the measured 26.1 GB/s that is **1.49 s per step regardless of how many tokens the step holds** (P-H5 later measured 26.3 GB/s pinned, about 1 % faster, on both platforms). The transfer is hidden behind compute once a step holds at least about 1,495 / 2,242 / 2,989 tokens when compute runs at 1,000 / 1,500 / 2,000 tokens/s.
 * **Derived by.** 2 × bytes ÷ bandwidth, then bytes-per-step ÷ compute rate. The bandwidth is the engine project's measured zero-copy floor.
 * **Label.** DERIVED from a MEASURED bandwidth. **Depends on it:** the layer-major scheduler with K micro-batches per layer sweep (D5). **Master:** 5, 13, Appendix E.
 
 ### 1.8 Work per token and peak speed
-* **Finding.** Training costs about 20.39 GFLOP per token at 8,192 tokens (forward 6.74). Frozen weights get no weight-gradient, so backward costs about one forward, not two. Peak rates for this card: bf16 58.3 TFLOPS (65.4 at the author's overclock), int8 233.2 TOPS (261.4).
+* **Finding.** Training costs about 20.39 GFLOP per token at 8,192 tokens (forward 6.74). Frozen weights get no weight-gradient, so backward costs about one forward, not two. Peak rates for this card: bf16 58.3 TFLOPS stock (DERIVED) and, at the author's overclock, 65.2 sustained (MEASURED by P-H3; the derived figure was 65.4), int8 233.2 TOPS stock (DERIVED) and 259.5 sustained (MEASURED; derived 261.4).
 * **Derived by.** Per-operation counts in master 6.10; peaks scaled from the published RTX 4090 rows to 46 SMs and this card's clocks.
-* **Label.** DERIVED. **The achieved fraction of peak is unknown** (P-H3 measures the real peaks, P-K1 to P-K3 the efficiency). Speed targets of 600 / 1,200 / 2,000 tokens/s are DECISIONS to be re-based after those probes. **Master:** 6.10, 13.
+* **Label.** DERIVED. **The achieved fraction of peak is unknown** (P-H3 has now measured the real peaks; P-K1 to P-K3 measure the efficiency). Speed targets of 600 / 1,200 / 2,000 tokens/s are DECISIONS to be re-based after those probes. **Master:** 6.10, 13.
 
 ### 1.9 The 10 full-attention layers do not route differently
 * **Finding.** Using the engine's routing trace (84,503 fit and 36,657 held-out decode steps × 40 layers × 8 experts): overall bank hit rate 0.8273, any-miss share 0.639. For the 10 full-attention layers hit rate is 0.8299 against 0.8265 for the other 30; the share of tokens with zero misses is 0.3636 against 0.3602. Holding all 10 layers fully resident would cost 4.605 GiB (4,715 MiB = 4 × 432 + 6 × 498) of the 7.5 GiB bank and would **lower** the overall hit rate to 0.7114.
@@ -103,6 +103,15 @@ Each entry: **finding** · **how it was derived** · **label** · **what depends
 * **PyTorch / PEFT / Unsloth code inside the product:** excluded by the ground-up rule; no AGPL or LGPL code is copied.
 * **A claim of novelty:** none is made in the repositories.
 
+### 1.18 What the machine measured (Wave 0 hardware set, 2026-10-23/24)
+* **Finding 1 — the ceiling.** The card has 11.99 GiB, but once a CUDA context exists CUDA reports only **10.83 GiB free on WSL2 and 10.85 on Windows-native**, identically on every run and in 21 engine logs (a fixed driver budget; inference). The first P-H8 rule (free ≥ ceiling + 0.3 = 11.2) could never pass, so the author set the ceiling to 10.7 and the rule became "the smaller of CUDA free and NVML free after the context ≥ 10.7". The "11.2" in the author's memory is most likely the engine's own gate, "VRAM at most 11.2 GiB" (P1 and G3 in its benchmark files), which is a **whole-card** peak; the 8.0 GiB bank peaked at 11.19 GiB and ran. So three different quantities have carried the name "the ceiling" (master 16.3 X15), and which one the 10.7 means is **decision 7**.
+* **Finding 2 — copy/compute overlap needs a flush.** On WSL2 and on Windows-native, work queued on different streams is not sent to the GPU until something flushes the queue; copies and kernels then run one after another (overlap efficiency 0.47–0.52), and a `cudaStreamQuery` after each enqueue brings it to 0.92 (the copy pair alone 0.84). The flush costs 8 µs of host time per call on Windows-native and 77 µs on WSL2, hidden while the GPU has queued work. The streamer therefore flushes once per multi-millisecond batch (D27). Whether the **engine** suffers the same loss is unmeasured; the pathway is to add the flush to its enqueues and compare token rates (engine side, held).
+* **Finding 3 — the platforms agree on the GPU and differ on the host.** Tensor rates (bf16 65.2, int8 259.5 T(FL)OPS, 99.8 % of burst, flat clock for 30 minutes), VRAM bandwidth (523–534 GB/s read) and PCIe (26.3 GB/s each way) are the same on both; flush cost, pinned-allocation time (0.8–1.0 s vs 0.07 s per GiB), small-copy latency and the memory clock under load differ. 32 GiB of pinned memory was held on both (the limit is not found), which retires risk R7.
+* **Finding 4 — the throttle-reason field is useless here.** The driver reports "gpu_idle" on every sample under full load on both platforms, so thermal judgement uses the SM clock and temperature.
+* **Finding 5 — a long GPU job did not disturb the display.** Five stages (kernels of 2, 5 and 30 s, a 10 s queued set, a 10 s graph; about 60 W) completed on both paths with no display-driver events and nothing seen on screen. Heavier kernels and other display setups are unmeasured.
+* **Derived by.** One standalone program (`pelias_probe`) run in full on each platform; each probe writes one JSON; the numbers above are read from those files, not from memory. The raw files are in the author's backup folder, not in the repository.
+* **Label.** MEASURED, except the "fixed driver budget" and "most likely the engine's gate" (inference). **Not yet measured, with pathways:** P-M4 (needs the model path), the stock-clock repeat, the Windows jitter number (the probe asks Windows for no finer timer, so its 6 ms is probably the 15.6 ms default tick), pinned memory above 32 GiB, the memory-clock difference, ReBAR on/off, heavier kernels for the display test, the Balanced power plan, the engine's own overlap. **Master:** 11.12, 5.4, 15.1, 16.3 X15–X16, D26, D27.
+
 ---
 
 ## 2. How the pieces depend on each other
@@ -130,12 +139,13 @@ KL floor of the served file (1.13) ──► K1/K2/K3 gates ──► whether th
 | If this changes… | …then redo | Because |
 |---|---|---|
 | The engine's bank size (7.5 GiB) | 1.6 headroom → 1.5 core types → export; 1.10 value of locality | The core's room and the hit rate both move |
-| The prefill micro-batch (`-ub`) | 1.6 (0.36 or ≈0.11 GiB) | The engine's peak VRAM changes |
+| The prefill micro-batch (`-ub`) | 1.6 (0.16 GiB or none on the whole-card reading) | The engine's peak VRAM changes |
 | The llama.cpp commit (`2ca15f540`) | 1.2, 1.12, 1.14, the quantizer port (P-E6) | Graph, block layouts and kernels are read from that commit |
 | The served GGUF (a new trained file) | 1.1, 1.13 (new KL floor), 1.9 (routing may shift) | Weights and routing change |
-| Measured expert bandwidth (26.1 GB/s) | 1.7 tokens-per-step thresholds | The stream time is bytes ÷ bandwidth |
+| Measured expert bandwidth (26.1 GB/s engine; 26.3 GB/s pinned, P-H5) | 1.7 tokens-per-step thresholds | The stream time is bytes ÷ bandwidth |
 | Clock settings (overclock on or off) | 1.8 peak rates; P-H3 | Rates scale with clocks |
-| The VRAM ceiling (10.9 GiB, author-stated) | 1.6 and the memory governor (master 15) | Everything is budgeted against it |
+| The VRAM ceiling (10.7 GiB, author-stated) and what it is measured against | 1.6 and the memory governor (master 15) | Everything is budgeted against it |
+| The GPU driver (617.42) or the submission pattern | 1.18 (flush rule), P-H12, P-H9 | Copy/compute overlap depends on when the driver sends queued work |
 | The engine adds `Q8_0` kernels (P-E5) | 1.5 (the 8-bit candidate becomes usable) | The engine must be able to run what the trainer exports |
 
 ### 2.3 Which section of the master holds which derivation
@@ -145,11 +155,12 @@ KL floor of the served file (1.13) ──► K1/K2/K3 gates ──► whether th
 | Model facts and byte map | 2.2–2.5, Appendix A | none (READ-SRC) |
 | Baseline being replaced (v0.2.1) | 2.6 | P-T9 (new trainer on v0.2's recipe) |
 | Precision map and export | 4, 9.4 | P-E6, P-E7, P-E8 |
-| Kernels | 6 | P-H3, P-K1–K3 |
+| Kernels | 6 | P-H3 (done, 11.12), P-K1–K3 |
 | Router locality (Mode L) | 7.12, 16.5 B1 | P-E1 (done), P-E2, P-E3, P-L1–L10 |
 | Verification ladder | 10 | P-Q4a, P-Q4b |
 | Engine fit | 16 | P-E4, P-E5, P-E9–P-E14 |
 | Risks and kill criteria | 14 | per risk |
+| Measured hardware facts | 11.12, 2.1 | the hardware set has run except P-M4; leftovers listed in 11.12 |
 | All arithmetic | Appendix E | none (scripted) |
 
 ---
@@ -161,16 +172,17 @@ KL floor of the served file (1.13) ──► K1/K2/K3 gates ──► whether th
 | # | Decision | Why it matters | What it changes |
 |---|---|---|---|
 | 1 | Is the 7.5 GiB bank a ruling or a derived value? | The core's room (1.6) is set by it; 8.0 GiB does not fit | Core types, export size |
-| 2 | Which prefill micro-batch ships? | 0.36 GiB of room at the default, about 0.11 GiB at `-ub 2048` | Which core classes can be raised above their served type |
+| 2 | Which prefill micro-batch ships? | 0.16 GiB of room at the default, none at `-ub 2048` (whole-card reading; it was 0.36 / about 0.11 at 10.9) | Which core classes can be raised above their served type |
 | 3 | Will the engine add `Q8_0` kernels? | The 8-bit core is only usable if the engine can run it | Whether the 8-bit candidate stays on the list |
 | 4 | Promote Windows-native from "not in scope"? | It is 5.1–5.2 ms per token faster at decode (1.15) | Which platform the trainer's exports are tuned for |
 | 5 | Is Mode L / L-Z worth building after the Wave 0 probes? | Benefit is unverified and the evidence is mixed (1.9, 1.10) | Whether any router training is built |
 | 6 | Is there a Windows run newer than the repo's? | The gap table uses the recorded runs only | 1.15 |
+| 7 | What is the 10.7 GiB ceiling a ceiling of: the whole card (Windows' share included, as the engine's peaks and its 11.2 gate are measured) or the process's own allocations (as P-H8 and the plan sum read it)? | Whole card: 0.16 GiB / none for the core. Process only: about 1.2 / 0.9 GiB and the 8-bit core would fit (1.18, master 16.3.1) | Core types, export size, and whether the engine's bank is re-examined |
 
 ### 3.2 Measurements needed (each has a probe in master Chapter 11; Wave 0 needs no trainer code)
 
 **Speed foundation** — without these the speed story is arithmetic on assumed efficiency:
-* P-H3 real tensor rates and clocks; P-H8 free VRAM at start.
+* P-H3 real tensor rates and clocks; P-H8 free VRAM at start (both done 2026-10-23/24, master 11.12).
 * P-K1 efficiency of the bf16 path; P-K2 efficiency of the int8 path; P-K3 whether in-register dequantization is memory-bound or compute-bound.
 
 **Accuracy foundation** — without these a "close to llama.cpp" claim cannot be made:
@@ -201,16 +213,17 @@ KL floor of the served file (1.13) ──► K1/K2/K3 gates ──► whether th
 * The original outside research report, if it is to be kept with the record (the master holds a claim-by-claim table of it, 16.4).
 
 ### 3.4 Work not yet done
-* **No trainer code** exists. The stages T0–T14 (master 12) have not started.
+* **No trainer code** exists. The stages T0–T14 (master 12) have not started. The hardware probe program exists and has run (P-M4 is built but has not run); every other probe is still a specification.
 * **Edits to the engine blueprint** are listed in master 16.7 and are **proposed, not made**: scope line; VRAM-budget table; CPU-read row; E3 gate (the oracle reads trainer GGUFs); E5 (per-layer capacities, `Q6_K` 210-byte blocks); E11 (huge pages); E12 (hot-set objective); unknowns table; contract section; sources. They wait for the author to lift the pause.
 * **Engine side:** the cross-check against the speed ceiling, the engine master notes, the engine plain-English README, and the engine repository update.
 
 ### 3.5 Weak points in this design (so they are not missed)
+* **The ceiling has no single meaning yet** (decision 7): the core's room is 0.16 GiB / none or about 1.2 / 0.9 GiB depending on the reading.
 * **Efficiency is unmeasured.** Every tokens-per-second figure for the new trainer is conditional on it (1.8).
 * **The size of the merge loss on the core is unmeasured** (1.4); the whole precision plan has an escalation ladder (master 4.8) for the case it is worse than expected.
 * **The hot-set and locality ideas are hypotheses** (1.9–1.11). Nothing here depends on them to produce a working trainer.
 * **The author's guess that 70–80 % of the earlier draft was compliant is not confirmed.** The compliance matrix has 22 rows: 7 already met, 4 needing correction, 6 new specification, 3 resting on premises the engine's data does not support, 2 waiting on probes. There is no natural denominator for a percentage.
-* **Label counts in the master** (occurrences): MEASURED 24 · READ-SRC 42 · PUBLISHED 33 · DERIVED 72 · ESTIMATE 23 · UNVERIFIED 19 · DECISION 18. Each ESTIMATE and UNVERIFIED claim is paired with a probe.
+* **Label counts in the master** (occurrences, 2026-10-24): MEASURED 35 · READ-SRC 42 · PUBLISHED 33 · DERIVED 81 · ESTIMATE 23 · UNVERIFIED 19 · DECISION 19. Each ESTIMATE and UNVERIFIED claim is paired with a probe.
 
 ### 3.6 How to keep this file true
 When a probe returns, change its entry's label from ESTIMATE or UNVERIFIED to MEASURED, record the date and the raw file, and update the rows of 2.2 that depend on it. Never replace a derived number with a guess. If a result contradicts the master, correct the master first, then this file.

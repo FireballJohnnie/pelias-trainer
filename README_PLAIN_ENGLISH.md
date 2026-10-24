@@ -33,7 +33,7 @@ The result is that a model that needs far more than 12 GB can be trained on a 12
 
 A new document, [`docs/PELIAS_TRAINER_CUDA_MASTER_SCAFFOLD.md`](docs/PELIAS_TRAINER_CUDA_MASTER_SCAFFOLD.md), is a **complete design for rebuilding the trainer from scratch in C++ and CUDA**, with no Python and no PyTorch inside it.
 
-**Important: this is a design only.** No code for the new trainer has been written, and nothing in the design has been run on the GPU yet. Every number in it is labelled, and every claim that could not be checked has a named test (a "probe") that turns it into a measurement. There are 99 probes.
+**Important: this is a design.** No code for the new trainer has been written. The tests of the computer's hardware (the GPU, the memory, the link between them) were run on 2026-10-23/24 and their results are in the design; the rest of the design has not been run. Every number in it is labelled, and every claim that could not be checked has a named test (a "probe") that turns it into a measurement. There are 100 probes.
 
 In everyday terms, the design aims to do five things better than version 0.2.1:
 
