@@ -5,12 +5,12 @@
 
 | | |
 |---|---|
-| Date | 2026-10-23; hardware results and the 10.7 GiB ceiling folded in 2026-10-24; universal-use design points and the ruling on decision 7 recorded the same day; the intake, client-style, warning, confirm-loop and Expert-mode points (master U7–U11) added later that day |
+| Date | 2026-10-23; hardware results and the 10.7 GiB ceiling folded in 2026-10-24; universal-use design points and the ruling on decision 7 recorded the same day; the intake, client-style, warning, confirm-loop and Expert-mode points (master U7–U11) added later that day; the author's final decisions of 07:39 (Mode Q by default, bf16 in, Batch C, oracle files; master D31–D36) added; the measured bf16 layout (§1.21) added last |
 | Status | **Design, plus the Wave 0 hardware measurements. No trainer code exists.** The hardware probes were run on the GPU on 2026-10-23/24 (WSL2 and Windows-native); section 1.18 records what they found and master 11.12 holds the table. The other numbers come from reading files, reading source, running the engine project's logged results through arithmetic, and one analysis of the engine's routing trace (P-E1). |
 | Draft | Written quickly from the master. Section 3 (what is needed) is the part to act on. |
 | Copyright | Copyright (c) 2026 John Lipka and the Pelias contributors |
 
-**Labels** (same as the master, section 0.2): **MEASURED** (run on the author's machine, in a ledger or raw file) · **READ-SRC** (read from source or from the served model file's header) · **PUBLISHED** (external, cited in master Appendix B) · **DERIVED** (arithmetic from labelled inputs) · **ESTIMATE** (judgement, paired with a probe) · **UNVERIFIED** (not relied on until its probe passes) · **DECISION** (a design choice with a reason).
+**Labels** (same as the master, section 0.2): **MEASURED** (run on the author's machine, in a ledger or raw file) · **READ-SRC** (read from source or from the served model file's header) · **PUBLISHED** (external, cited in master Appendix B) · **DERIVED** (arithmetic from labelled inputs) · **ESTIMATE** (judgement, paired with a probe) · **UNVERIFIED** (not relied on until its probe passes) · **DECISION** (a design choice with a reason) · **AUTHOR-STATED** (a figure or expectation the author gave in a message; not measured or read here).
 
 ---
 
@@ -118,6 +118,20 @@ Each entry: **finding** · **how it was derived** · **label** · **what depends
 * **Derived by.** Reading the author's statements against the master. Nothing here is a measurement.
 * **Label.** DECISION (D28, D29, D30). The hash time is UNVERIFIED: it depends on the read rate (P-M4) and the CPU's SHA-256 speed, both unmeasured. The drift of other programs' GPU memory during a run is unmeasured too; the way to measure it (the disturbance test) is in master 11.12. **Master:** 3.3, 11.1, 11.12, 15.1, 16.3.1, 16.7 decisions 7–9, D28, D29, D30.
 
+### 1.20 The final decisions of 07:39: Mode Q by default, bf16 in, two stages (2026-10-24)
+* **Finding.** The author ruled five things. (1) The trainer's micro-batch and context come from the start-up probe, not from the engine, with manual values only in Advanced/Developer (the Expert mode of U11). The default export adds no bytes: Mode Q at the served types (E-F), with the adapter written alongside. (2) No Q8_0 (+607.4 MiB) or Q6_K (+282.0 MiB) core by default; the byte-budget solver (D22) is an override. (3) The input is the full bf16 safetensors (first recorded as 73–74 GB, author-stated; measured later the same morning as 71.90 GB, §1.21), never an earlier trainer's GGUF and never a third-party quantization. Stage A writes `pelias_base_0step.gguf` with Pelias's own block quantizer, a 0-step baseline to benchmark against the stock Q4_K_M and the bf16 model. Stage B trains on it with Mode Q and byte-splices the frozen experts with a SHA-256 proof. (4) The four kernel probes P-K1, P-K2, P-K3 and P-Q10 run as one batch (Batch C) on WSL2 and Windows-native, under the 10.7 GiB cap. (5) The oracles are the Chapter 10 ladder, not the earlier trainer's outputs, and wait for the verification stage.
+* **Where this document's reading differs from the message, and what the master says.** (a) Under Mode Q the adapter is informational, not the reference: training saw `W_eff`, not `W_base + ΔW` (master 4.10, risk 3). (b) The 7.90 GiB total (headroom 2.8) does not include Mode Q's `W_eff` copy (0.8–1.1 GiB, ESTIMATE): with it the headroom is 1.7–2.0 GiB (DERIVED). (c) "0.00 % merge drift" and "KL ≤ 0.017353" are design targets, not results; 0.017353 and 0.018286 are the engine's float spread on the earlier served file and are re-measured on the new base (master 16.5 B3, P-Q4). (d) Stage A is more than quantizing: it repeats llama.cpp's conversion (names, V-head tiling, norm folding: P-S2, P-S3) and its stock type map. The reference for both is llama.cpp's own converter plus `llama-quantize` (P-X0), and P-X6 compares tensor by tensor. (e) The default type map is the stock Q4_K_M mix; byte-budget pinning is the override. (f) The author's hypothesis that the finished file lies very close to the full model has no pass line before the run; P-X7 reports numbers side by side.
+* **What exists today.** Nothing of Stage A. No bf16 shards were in the folders first linked to the session on 2026-10-24; the author then found them in an archive folder (§1.21). The earlier GGUFs are not used. The code has the defaults as a configuration struct and a Stage A skeleton (host-testable parts only; nothing runs on the GPU yet).
+* **Derived by.** Reading the 07:39 message against master 4.3–4.10, 5.3, 9.1–9.4, 11.3, 11.7, 12.1–12.2, 16.7 and Appendix D. The headroom is 10.7 − (7.90 + 0.8…1.1). The 323 MiB of fp32 LoRA state is 21,166,080 parameters × 16 bytes (master, weights, gradients and the two Adam moments).
+* **Label.** DECISION (D31–D36). AUTHOR-STATED: the hypothesis (the 73–74 GB size was author-stated too, until §1.21 measured it). DERIVED: the headroom and the 323 MiB. UNVERIFIED: Mode Q convergence, Stage A run time and host RAM, and whether the bf16 model can be run here as a reference. **Master:** 1.5, 4.4, 4.10, 5.3, 9.1–9.4, 10.6, 11.3, 11.7, 12.1–12.2, 14.3, 16.7 decisions 2–3, D31–D36.
+
+
+### 1.21 The bf16 shards were found, and their layout measured (2026-10-24)
+* **Finding.** After the 07:39 decisions the author found the original checkpoint in an archived Hugging Face cache (all 26 shards present), and asked that the trainer's documents use what is really there. Only the headers were read (8 bytes plus a JSON header per shard; no weight byte, no token). Measured: 26 shards, 1,045 tensors, every tensor BF16, 71,903,645,408 bytes (66.97 GiB; 71.90 GB), equal to the index's `total_size`. The routed experts are **fused** (`gate_up_proj` [256, 1024, 2048] and `down_proj` [256, 2048, 512] per layer; 60.000 GiB in all), not per-expert. The checkpoint also holds the MTP block (19 tensors, 1.573 GiB) and a vision tower (333 tensors, 0.832 GiB). The class table is in master 4.2.
+* **What it changes.** (a) The size in the documents is 71.90 GB, not 73–74. (b) Stage A's conversion must split the fused `gate_up_proj` into gate and up; READ-SRC says llama.cpp's converter does exactly that (a row slice at 512), so the split is exact. (c) The converter keeps the MTP block unless told `--no-mtp`, which matches the 41-block file of master 4.1, so P-X0 converts in the default mode. (d) The vision tower is not read by Stage A; which converter class drops it is UNVERIFIED (P-X0 counts tensors; P-X6 compares).
+* **Derived by.** Running the header reader on the archived copy and summing bytes and parameters by tensor class; reading `conversion/qwen.py` and `convert_hf_to_gguf.py` at the pinned commit for the split and the MTP default.
+* **Label.** MEASURED (headers). READ-SRC (converter behaviour). UNVERIFIED: vision-tower handling, the converted file's size, Stage A's run time and host RAM. **Master:** 4.2, 11.7 (P-X0, P-X7), 12.2 (T1b), 14.3, D33.
+
 ---
 
 ## 2. How the pieces depend on each other
@@ -179,8 +193,8 @@ KL floor of the served file (1.13) ──► K1/K2/K3 gates ──► whether th
 | # | Decision | Why it matters | What it changes |
 |---|---|---|---|
 | 1 | Is the 7.5 GiB bank a ruling or a derived value? | The core's room (1.6) is set by it; 8.0 GiB does not fit | Core types, export size |
-| 2 | Which prefill micro-batch ships? | 0.16 GiB of room at the default, none at `-ub 2048` (whole-card reading; it was 0.36 / about 0.11 at 10.9) | Which core classes can be raised above their served type |
-| 3 | Will the engine add `Q8_0` kernels? | The 8-bit core is only usable if the engine can run it | Whether the 8-bit candidate stays on the list |
+| 2 | **Ruled 2026-10-24 (07:39):** which prefill micro-batch ships? | It is an engine setting and the trainer no longer depends on it: the default export adds +0 bytes (Mode Q) and the trainer's own micro-batch comes from the planner. The engine's peak still moves with it (0.16 GiB free at the default, none at `-ub 2048`, whole-card reading) | Only which classes the optional override could raise |
+| 3 | **Ruled 2026-10-24 (07:39):** will the engine add `Q8_0` kernels? | Not needed: no Q8_0 or Q6_K core by default | Q8_0 stays an Advanced/Developer override, usable only if the engine supports it |
 | 4 | Promote Windows-native from "not in scope"? | It is 5.1–5.2 ms per token faster at decode (1.15) | Which platform the trainer's exports are tuned for |
 | 5 | Is Mode L / L-Z worth building after the Wave 0 probes? | Benefit is unverified and the evidence is mixed (1.9, 1.10) | Whether any router training is built |
 | 6 | Is there a Windows run newer than the repo's? | The gap table uses the recorded runs only | 1.15 |
@@ -192,7 +206,7 @@ KL floor of the served file (1.13) ──► K1/K2/K3 gates ──► whether th
 
 **Speed foundation** — without these the speed story is arithmetic on assumed efficiency:
 * P-H3 real tensor rates and clocks; P-H8 free VRAM at start (both done 2026-10-23/24, master 11.12).
-* P-K1 efficiency of the bf16 path; P-K2 efficiency of the int8 path; P-K3 whether in-register dequantization is memory-bound or compute-bound.
+* P-K1 efficiency of the bf16 path; P-K2 efficiency of the int8 path; P-K3 whether in-register dequantization is memory-bound or compute-bound; P-Q10 FP8 behaviour. These four run as one batch (Batch C, master D35).
 
 **Accuracy foundation** — without these a "close to llama.cpp" claim cannot be made:
 * P-E6 is our port of the ggml quantizers bit-exact for `Q4_K`, `Q6_K`, `Q8_0`?
@@ -215,6 +229,11 @@ KL floor of the served file (1.13) ──► K1/K2/K3 gates ──► whether th
 **Baseline equivalence:**
 * P-T9 does the new trainer, on v0.2's recipe, learn at least as well as v0.2?
 
+**Base and Stage A (master D33):**
+* P-X0 the reference base: llama.cpp's own conversion and `llama-quantize Q4_K_M` of the bf16 shards, and how a third-party Q4_K_M differs from it.
+* P-X6 does Stage A reproduce that reference tensor for tensor?
+* P-X7 how far is each Q4_K_M from the full bf16 model (the author's hypothesis of near-zero drift is tested here)?
+
 ### 3.3 Information needed from outside this repository
 * The author's new engine information (pending at the pause).
 * Any Windows-native run newer than the one in the engine repo (decision 6).
@@ -223,6 +242,8 @@ KL floor of the served file (1.13) ──► K1/K2/K3 gates ──► whether th
 
 ### 3.4 Work not yet done
 * **No trainer code** exists. The stages T0–T14 (master 12) have not started. The hardware probe program exists and has run (P-M4 is built but has not run); every other probe is still a specification.
+* **Stage A (bf16 → `pelias_base_0step.gguf`)** is specified (master 12.2, T1b) and not written. The shard headers have been read (§1.21), so `ingest` can be specified from measured names and shapes. The shard bytes are still needed for P-X0, P-X6 and P-X7.
+* **Batch C** (P-K1, P-K2, P-K3, P-Q10) is specified as one run (master 11.3, D35); its source is not written yet.
 * **Edits to the engine blueprint** are listed in master 16.7 and are **proposed, not made**: scope line; VRAM-budget table; CPU-read row; E3 gate (the oracle reads trainer GGUFs); E5 (per-layer capacities, `Q6_K` 210-byte blocks); E11 (huge pages); E12 (hot-set objective); unknowns table; contract section; sources. They wait for the author to lift the pause.
 * **Engine side:** the cross-check against the speed ceiling, the engine master notes, the engine plain-English README, and the engine repository update.
 

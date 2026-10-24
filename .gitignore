@@ -3,3 +3,12 @@ out/
 *.bak
 *.bak-*
 __pycache__/
+
+# credentials and model data never belong in the repo
+token
+*.token
+.env
+.huggingface/
+hf_cache/
+*.safetensors
+*.gguf

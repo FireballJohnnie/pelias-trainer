@@ -5,7 +5,7 @@
 | | |
 |---|---|
 | Document | `PELIAS_TRAINER_CUDA_MASTER_SCAFFOLD.md` — scaffold v1.0 |
-| Date | 2026-10-23; the Wave 0 hardware results and the 10.7 GiB ceiling were folded in on 2026-10-24; the universal-use design points and the ruling on decision 7 were recorded the same day; the parameter-intake, client-style, warning, confirm-and-retest and Expert-mode points (U7–U11) were added later that day |
+| Date | 2026-10-23; the Wave 0 hardware results and the 10.7 GiB ceiling were folded in on 2026-10-24; the universal-use design points and the ruling on decision 7 were recorded the same day; the parameter-intake, client-style, warning, confirm-and-retest and Expert-mode points (U7–U11) were added later that day; the author's final decisions of 07:39 (Mode Q as the default export path, no core type inflation by default, a two-stage ingest from the full bf16 safetensors, the Batch C kernel probes, the oracle files; D31–D36) were folded in; the measured layout of the bf16 shards (4.2) was added last |
 | Status | **Design, plus the Wave 0 hardware measurements. No trainer code exists yet.** The hardware probes (P-H1 to P-H10, P-H12, P-H13, P-M3; P-M4 is built but has not run) exist as one standalone program and were run on the GPU on 2026-10-23/24, on WSL2 and on Windows-native; their results are in 11.12 and have been folded into the chapters that use them. Every other probe is still a specification that has not run. Every number carries a label (see 0.2). Every unverified claim has a named probe (Chapter 11) that turns it into a measurement. |
 | Replaces | `pelias-trainer 0.2.1` (Python/PyTorch, the trainer that produced the current model) |
 | Companion work | planned, **not yet written** (paused at the author's request until the author's new engine information is in): the engine cross-check (`PELIAS_ENGINE_CROSSCHECK_SPEED_TO_CEILING.md`), the engine master notes (`PELIAS_ENGINE_MASTER_NOTES.md`) and the proposed edits to the engine blueprint (16.7) |
@@ -32,6 +32,7 @@ Every number and every claim in this document carries one of these labels. If a 
 | **ESTIMATE** | Engineering judgement. Always paired with a probe that replaces it with a measurement. |
 | **UNVERIFIED** | A claim from a proposal document, a reviewer, or memory that has not been checked. Not relied upon until its probe passes. |
 | **DECISION** | A design choice made here, with its reason. Reversible unless stated. |
+| **AUTHOR-STATED** | A figure or expectation the author gave in a message and the design records as given (for example the hypothesis of near-zero drift to the full model; the 73–74 GB size of the bf16 shards was recorded this way until the shard headers were read on 2026-10-24). Not measured or read here; always paired with a probe, like an ESTIMATE. |
 
 Units: **GiB = 2³⁰ bytes, MiB = 2²⁰ bytes, GB = 10⁹ bytes.** "tok/s" for training means *processed tokens per second* (every token that goes through the network, assistant or not), which is the convention of the v0.2 ledger (inferred: 202.7 min × 247.85 tok/s ≈ 3.0 M processed tokens vs 1.97 M assistant tokens over two epochs — probe P-T10 pins the definition).
 
@@ -59,7 +60,7 @@ Units: **GiB = 2³⁰ bytes, MiB = 2²⁰ bytes, GB = 10⁹ bytes.** "tok/s" for
 | 8 | Data pipeline | Tokenizer and template parity, packing, masks, audits |
 | 9 | Export | Adapter GGUF, merged-core GGUF, byte-splice, engine hand-off |
 | 10 | Verification ladder | Three oracles, ten rungs, gates |
-| 11 | **Probe catalogue** | 100 probes: question, method, pass/fail, output, when; and (11.12) the hardware results so far |
+| 11 | **Probe catalogue** | 102 probes: question, method, pass/fail, output, when; and (11.12) the hardware results so far |
 | 12 | Order of operations | Stages T0–T14 with deliverables and exit gates |
 | 13 | Performance model | Roofline, sensitivity table, targets |
 | 14 | Risks and kill criteria | Including the 12 parked problem areas |
@@ -99,16 +100,16 @@ The reference point is `pelias-trainer 0.2.1`: **median 247.85 tok/s, 202.7 min 
 ### 1.2 The design in twelve lines
 
 1. **One native process**, C++20 + CUDA 13.0 (`nvcc 13.0.88`), `sm_89` only. No Python in the product. No autograd engine: every operation has a hand-written forward and backward.
-2. **GGUF in, GGUF out.** The trainer reads the exact file the engine serves and trains against those bytes. (D1)
+2. **GGUF in, GGUF out, made from the full-precision source.** The user supplies the original bf16 safetensors once. Stage A converts them and quantizes them with Pelias's own ggml-exact block quantizer into `pelias_base_0step.gguf` (the stock Q4_K_M type map, no imatrix; cached on disk). Stage B then reads that file and trains against exactly those bytes, which are the bytes the engine serves. The trainer never downloads a model. (D1, D33)
 3. **The bulk is frozen and byte-exact.** The 256×40(+1) routed experts stay in their served `Q4_K`/`Q6_K` bytes (18.65 GiB incl. the MTP block), are streamed from pinned host RAM, and are **spliced byte-for-byte** into the output — zero expert drift by construction, proven by hash. (D2)
 4. **The trained part is a small "core"**: shared experts, DeltaNet projections, attention projections (1.41 B parameters, 820 MiB in the served mix). LoRA (rank 16 by default, 21.2 M parameters, fp32 masters) on top of the served base. (D3)
-5. **The core is exported as an isolated higher-precision block, sized to the engine's byte budget** (`Q6_K` by class where the merge probe allows, `Q8_0` only where it fits; or the served type when trained through the exact quantizer, Mode Q). The 4-bit base cannot hold a small learned delta (it is erased at the same type), and an all-8-bit core does not fit beside the engine's 7.5 GiB bank under the 10.7 GiB ceiling (Chapter 16). An unmerged GGUF LoRA adapter is kept as the zero-drift reference. (D4, Chapter 4)
+5. **The core keeps its served footprint and is trained through the exact quantizer (Mode Q, the default; D31).** The core stays in its native per-tensor Q4_K/Q6_K mix (820.3 MiB) with no extra bytes. Training uses `W_eff = Q_T(deq(W_base) + s·B·A)` with the exact ggml quantizer and a straight-through gradient, so the exported core is, bit for bit, the weights the loss saw. Zero merge drift at the export step is the design target; the train→serve gap is then limited by serving arithmetic and is measured, not assumed (P-X2). Raising classes to Q6_K or Q8_0 (the byte-budget solver of D22) is an optional Advanced/Developer override, off by default (D32). An unmerged GGUF LoRA adapter is always written; under Mode Q it is informational, because training never saw `W_base + ΔW`, so the merged file is the reference. (D4, D22, D23, D31, D32, Chapter 4)
 6. **Layer-major scheduling with K micro-batches per layer sweep.** Expert bytes per optimizer step are fixed at 2 × 18.16 GiB = **1.49 s at 26.1 GB/s** (DERIVED), independent of how many tokens the step holds, so PCIe is hidden once a step holds ≳2.2–3.0 k tokens. The trainer becomes compute-bound. (D5)
 7. **Frozen weights never receive weight-gradients**, so backward costs ≈1× forward matmul, not 2×. Total ≈ 20.4 GFLOP per token at T = 8192 (DERIVED).
 8. **Two forward numerics, chosen by measurement**: a bf16 reference path, and a **serve-faithful int8 path** (q8_1-style activations × integer dot, the same arithmetic the served CUDA kernels use). The int8 path is both ~4× the tensor-core rate on this GPU (DERIVED) *and* closer to what is served; it is adopted only if its KL to llama.cpp is not worse. (D6)
 9. **Routing tape**: the top-8 expert ids per token per layer are stored in the forward sweep, so the backward recompute is deterministic; the same tape gives training-distribution expert-usage statistics for the engine's hot bank. The router is frozen by default. (D7)
 10. **Loss**: fused chunked cross-entropy in fp32 (no full-vocabulary logits tensor), step-wide token normalization (fixes v0.2's short-sample over-weighting). (D8)
-11. **Verification is built in, not bolted on**: three oracles (llama.cpp = served truth; an fp64 reference written for this project; a PyTorch fp32 autograd model used only in tests), a ten-rung ladder, and 100 probes that turn every uncertain number into a measured one.
+11. **Verification is built in, not bolted on**: three oracles (llama.cpp = served truth; an fp64 reference written for this project; a PyTorch fp32 autograd model used only in tests), a ten-rung ladder, and 102 probes that turn every uncertain number into a measured one.
 12. **Fifteen stages (T0–T14)**, each with an exit gate. Nothing proceeds on a failed gate.
 
 Beyond the twelve lines there is one **optional, gated** mode (Mode L, 7.12, D21): train the router (21.5 M fp32 parameters, frozen experts) with a locality term so that more of each token's top-8 lands in the engine's VRAM hot bank. It costs 0.2 % FLOPs and 0.32 GiB, ships only if it passes four pre-declared gates (quality ≤ +1 % CE, hit rate ≥ +0.03, breadth, measured engine speed), and is supported by one paper's stacking result and one paper's router-only fine-tune — and contradicted at small scale by the first paper's headline result. It is a hypothesis with a kill criterion, not a promise.
@@ -160,12 +161,14 @@ The accuracy argument is structural, and each part of it has a test:
 |---|---|---|
 | Trained on group-64 affine 4-bit; served `Q4_K_M` (different grid) | Trained against the served bytes | P-S/P-T parity rungs; export KL (P-X2) |
 | Whole model re-quantized after the merge (experts moved) | Experts byte-spliced, untouched | Hash equality of every non-core tensor (P-X1) |
-| Merge of a small delta into a 4-bit grid | Core merged into 8-bit (or 6-bit); adapter kept as reference | P-Q3, P-X2, P-X3 |
+| Merge of a small delta into a 4-bit grid | Core trained through the exact quantizer (Mode Q), so the merge is the identity; an optional merge at a higher type; adapter written | P-E6, P-X2, T-A11 |
 | bf16 reductions in SwiGLU backward / router gradient | fp32 reductions and pointwise math | Kernel unit tests vs fp64 (rung 1) |
 | Per-micro-batch loss normalization (short samples over-weighted ~87×, per proposal A3) | Step-wide token normalization | P-T5 |
 | Frozen shared-expert gate and norms | Optional trainable (fp32), off by default until ablated | P-T6 |
 
 **We do not claim a benchmark gain.** v0.2's train→serve loss was never measured, so the size of the improvement from removing the mismatch is unknown. The plan measures it (P-X2 on the new model; P-Q3 on the old adapter) before anyone says a number.
+
+**The author's hypothesis (AUTHOR-STATED, 2026-10-24; unmeasured).** The author expects the finished system, measured against published test results, to lie very close to the full unquantized model. This is a hypothesis, not a claim. The published figure the plan cites for plain Q4_K_M (4.3: +0.24 PPL on Llama-3.1-8B) comes from another method and another model, and the author notes it predates this design. The plan measures the question directly: P-X7 reports KL and perplexity against the bf16 model for the stock file, the Pelias 0-step file and, after training, the Mode Q result, on one token set and one method. A published figure is compared only where its protocol (text, context length, metric) is reproduced; otherwise it is quoted, not compared.
 
 ### 1.6 The five biggest risks (details in Chapter 14)
 
@@ -173,7 +176,7 @@ The accuracy argument is structural, and each part of it has a test:
 2. **DeltaNet backward** is the hardest kernel set (chunked WY form, reverse state recurrence). *Mitigation:* an fp64 sequential oracle whose backward is derived in 6.7; llama.cpp already contains an fp32 sequential forward kernel to compare against; materialized-attention-style fallback exists for the attention layers.
 3. **No ECC on an overclocked card.** Silent bit-flips are possible. *Mitigation:* canary kernels, bitwise-deterministic re-runs, checksum of the LoRA state per step (15.3).
 4. **The served model is not one numeric function**: GPU and CPU paths quantize activations differently, and the fused GDN kernel is a sequential fp32 recurrence. *Mitigation:* the KL gate threshold is set from the *measured* llama.cpp float-spread (P-Q4), not from a round number.
-5. **The core's extra bytes compete with the engine's hot bank.** An all-Q8_0 core (+0.59 GiB) breaches the 10.7 GiB ceiling at the 7.5 GiB bank; all-Q6_K (+0.28 GiB) fits at neither prefill micro-batch (0.16 GiB free at the default, none at `-ub 2048`; it was 0.36 / ≈ 0.11 GiB at 10.9), so the byte-budget solver can raise only some classes (DERIVED, on the engine's whole-card basis; 16.3.1 gives the other reading, which leaves about 1 GiB, and decision 7 in 16.7 asks which one is meant). *Mitigation:* a byte-budget solver per class (D22), Mode Q for zero-byte merges (D23), engine regression gate (P-X5, P-E4).
+5. **The core's extra bytes compete with the engine's hot bank.** An all-Q8_0 core (+0.59 GiB) breaches the 10.7 GiB ceiling at the 7.5 GiB bank; all-Q6_K (+0.28 GiB) fits at neither prefill micro-batch (0.16 GiB free at the default, none at `-ub 2048`; it was 0.36 / ≈ 0.11 GiB at 10.9), so only some classes could be raised (DERIVED, on the engine's whole-card basis; 16.3.1 gives the other reading, which leaves about 1 GiB). *Mitigation (since 2026-10-24, D31, D32):* the default adds no bytes: Mode Q at the served types (E-F), so the export never depends on spare engine VRAM; the byte-budget solver (D22) is an Advanced/Developer override only. *Residual risk:* Mode Q's own risks (STE oscillation, GPU quantizer bit-exactness; 4.10) stay open until P-E6, P-E7 and the ablation T-A11 report.
 
 ### 1.7 What to run first
 
@@ -442,7 +445,7 @@ All from the pelias-engine ledger and raw files (MEASURED unless marked). The tr
 |---|---|---|
 | 1 | **Train what is served.** | The trainer's base weights are the served GGUF bytes. Its forward pass reproduces the served arithmetic as closely as is useful (4.5). |
 | 2 | **Splice, don't re-derive.** What is frozen is never recomputed, re-quantized or re-encoded; it is copied byte for byte and proven identical by hash. | Frozen tensors are mapped read-only; the exporter has no code path that could write them. |
-| 3 | **Spend bits where behaviour lives.** The 94 % of parameters that are routed experts carry knowledge; the ~4 % in the spine carry the behaviour we want to change. | Experts stay at 4/6-bit untouched; the spine gets LoRA and an 8-bit home. |
+| 3 | **Spend bits where behaviour lives.** The 94 % of parameters that are routed experts carry knowledge; the ~4 % in the spine carry the behaviour we want to change. | Experts stay at 4/6-bit untouched; the spine gets LoRA and keeps its served-type footprint, trained through the exact quantizer (Mode Q); a higher-bit home is an optional override. |
 | 4 | **Reorganize the loop before optimizing the kernel.** The old design was bandwidth-bound because the loop order was wrong. | Layer-major scheduling (5.6) comes first; kernel work comes second. |
 | 5 | **Two implementations of everything.** A slow, obviously-correct version and a fast version; the fast one is admitted only when it matches. | Every kernel has a CPU or fp64 reference in `tests/` (rung 1). |
 | 6 | **Measure, then plan.** The memory plan, the number of micro-batches and the slot count are functions of measured constants, not hard-coded. | `roofline_solver` reads `probe_constants.json` (5.2). |
@@ -463,7 +466,8 @@ All from the pelias-engine ledger and raw files (MEASURED unless marked). The tr
 | RL / DPO / preference losses | The loss interface (per-token weights, sequence masks) leaves room; not built |
 | CPU-only or AVX-512/AMX training | The 5800X3D has AVX2 only |
 | FP8 compute | Measured (P-H3, P-Q10) but not planned; Ada FP8 gives 2× BF16 FP32-acc rate, not 4× |
-| Re-quantizing the base or computing an imatrix | The base is taken as given (D9); stock `llama-quantize` makes it |
+| Computing an imatrix, or any calibration-based quantization of the base | The base is the plain block quantization of the original bf16 weights with the stock Q4_K_M type map and no imatrix, written once by Stage A (D9, D33); a third-party file made with an imatrix is a different base |
+| Downloading a model | The trainer never fetches a model. The user supplies the path to the bf16 safetensors folder (and, for Stage B only, may point at an existing GGUF); the help text tells a user who has none to obtain one from a model hub of their choice (D33) |
 
 ### 3.3 Universal use — design points recorded 2026-10-24 (not built; they come after the top-tier gate)
 
@@ -489,7 +493,7 @@ The author's aim is a trainer that adapts to the machine, and to the MoE model t
 
 > **The ask (author, 13:49):** move everything down to 4-bit, keep some 6-bit, have an 8-bit isolated core while training the rest of the active — "come up with the best path", with no hallucinated results.
 >
-> **The answer in one sentence:** the bulk stays exactly as served at 4/6-bit and is never touched; the part that learns lives in an isolated, higher-precision core (6-bit where the merge probe and the engine's byte budget allow, the served type with merge-aware training otherwise; 8-bit was the first suggestion and is a candidate only if the engine supports it and the budget has room) with fp32 learning state; the arithmetic that connects them is chosen by measurement, with a defined escalation ladder if a measurement fails.
+> **The answer in one sentence:** the bulk stays exactly as served at 4/6-bit and is never touched; the part that learns lives in an isolated core that keeps its served footprint (the stock Q4_K/Q6_K mix, 820 MiB) and is trained through the exact quantizer (Mode Q, the default, D31) with fp32 learning state; 6-bit or 8-bit homes (D22) are optional Advanced/Developer overrides (D32); the arithmetic that connects them is chosen by measurement, with a defined escalation ladder if a measurement fails.
 
 ### 4.1 The precision map
 
@@ -499,7 +503,7 @@ The author's aim is a trainer that adapts to the machine, and to the MoE model t
 | Routed experts: down (**Q6_K in 21 layers** = 20 trunk + MTP; Q4_K in 20) | 11.0 B · 7.1 GiB | **Q6_K** / Q4_K | same | same | **never** | **identical bytes** |
 | Token embedding | 508.6 M · 272.8 MiB | Q4_K | gather + dequant | none | never | identical |
 | lm_head | 508.6 M · 397.9 MiB | **Q6_K** | dequant → logits fp32 (chunked) | data-grad only | never (option: LoRA, off) | identical |
-| **Core**: shared experts, DeltaNet in/out/α/β, attention q/k/v/o | 1,409 M · 820 MiB | Q4_K/Q6_K mix | base bytes as above **+ LoRA** | data-grad through base + LoRA grads | **LoRA only** | **merged at the budgeted type (4.4)** |
+| **Core**: shared experts, DeltaNet in/out/α/β, attention q/k/v/o | 1,409 M · 820 MiB | Q4_K/Q6_K mix | **Mode Q (default): the bytes of `W_eff` (4.10), no separate LoRA branch**; otherwise base bytes **+ LoRA** | data-grad through the forward weights + LoRA grads (straight-through in Mode Q) | **LoRA only** | **Mode Q: the last `W_eff` at the served types (4.10)**; override: merged at a raised type (4.4) |
 | Router | 21 M · 82 MiB | F32 | fp32 | fp32 data-grad (weights of the selected 8 are differentiable, the selection is not) | frozen (Mode L, 7.12: fp32 trainable) | identical (Mode L: rewritten F32, exact) |
 | Norms, conv1d taps, `ssm_a`, `dt_bias`, shared-expert gate | < 8 MiB | F32 | fp32 | fp32 | optional trainable (fp32) | F32 |
 | LoRA A, B | 21.2 M | — | bf16 compute copy | bf16 → fp32 gradients | AdamW on fp32 masters | folded into the core / adapter GGUF |
@@ -510,17 +514,43 @@ The author's aim is a trainer that adapts to the machine, and to the MoE model t
 
 (Sizes: gate + up = 2 × 41 × 144 MiB = 11,808 MiB; down = 4,410 + 2,880 MiB; all READ-SRC from 2.3.)
 
-So, in the author's words: **everything bulky is at 4 bit, the 6-bit tensors the served mix already has stay 6-bit, the trained core is an isolated higher-precision block, and the learning state around it is 16/32-bit.** (8-bit was the first suggestion. The engine audit of 16.5 (B2) shows an all-8-bit core does not fit beside the engine's 7.5 GiB bank under the 10.7 GiB ceiling, so the default is the budgeted mix of 4.4; 8-bit stays a candidate for the classes that fit.) Nothing is *re-quantized to 4-bit* — the 4-bit is simply the file we were given.
+So, in the author's words: **everything bulky is at 4 bit, the 6-bit tensors the served mix already has stay 6-bit, the trained core is an isolated block that keeps its served types and is trained through the exact quantizer (Mode Q), and the learning state around it is 16/32-bit.** (8-bit was the first suggestion. The engine audit of 16.5 (B2) shows an all-8-bit core does not fit beside the engine's 7.5 GiB bank under the 10.7 GiB ceiling, so 8-bit is not a default (author's ruling, 2026-10-24: D31, D32); it stays an optional override for the classes that fit.) During training nothing is re-quantized to 4-bit except through Mode Q's exact quantizer at the core's own served type; the frozen 4-bit bytes are the file Stage A wrote (D33).
 
 ### 4.2 Why train on the served bytes — three options considered
 
 | Option | What it is | Verdict |
 |---|---|---|
 | O1 | Train on a simulated 4-bit grid (v0.2: affine group-64), serve a different one (`Q4_K_M`) | **Rejected.** The LoRA learns to cancel the wrong grid's error. Never measured, so unknown size; avoidable. |
-| O2 | Train on bf16 weights (74 GB for this model; impossible on 12 GB), quantize afterwards | **Rejected.** Not feasible on this hardware, and post-hoc quantization of a merged delta has the same problem as v0.2's export. |
-| O3 | Train on the exact served bytes; learn only a delta; merge the delta at higher precision | **Chosen (D1).** The base is identical to what is served, so the only train→serve gap is the core's merge. |
+| O2 | Train on bf16 weights (71.9 GB for this model, MEASURED; impossible on 12 GB), quantize afterwards | **Rejected.** Not feasible on this hardware, and post-hoc quantization of a merged delta has the same problem as v0.2's export. |
+| O3 | Train on the exact served bytes; learn only a delta; close the merge gap through the exact quantizer (Mode Q) or by merging at higher precision | **Chosen (D1, D31).** The base is identical to what is served, so the only train→serve gap is the core's merge, which Mode Q closes by construction. |
 
 This is related to QLoRA-style training (a quantized frozen base plus a higher-precision learned delta). The difference is that the base here is the *final serving format* — `Q4_K`/`Q6_K` super-blocks as llama.cpp wrote them — rather than a training-only format such as NF4.
+
+**Where the served bytes come from (D33; ruled 2026-10-24).** Not from an earlier trainer's output and not from a third-party quantization. The user supplies the original bf16 safetensors (71.90 GB = 66.97 GiB, MEASURED from the shard headers on 2026-10-24; P-X0 records the same size again on the machine that converts). Stage A reads them once, applies the conversions llama.cpp's converter applies (tensor names, V-head tiling, norm folding: P-S2, P-S3), chooses each tensor's type with the stock Q4_K_M rule, quantizes with the P-E6 port of ggml's reference quantizers, and writes `pelias_base_0step.gguf` (about 20 GiB; cached, so the bf16 is read once). That file is a 0-step baseline: it is benchmarked against the stock Q4_K_M and the bf16 model (P-X7) before any training. Stage B loads it, trains the LoRA masters through Mode Q, byte-splices the frozen experts with a SHA-256 proof and writes the core. The conversion is more than quantization, so it needs its own oracle: llama.cpp's own `convert_hf_to_gguf.py` plus `llama-quantize` at the pinned commit (P-X0), compared tensor by tensor (P-X6).
+
+**Measured layout of the bf16 checkpoint (2026-10-24; MEASURED, headers only).** The author's archived copy of `unsloth/Qwen3.6-35B-A3B` (snapshot `2ab40a9a…`, an Unsloth re-upload: its `config.json` carries `unsloth_fixed` and `unsloth_fixed_mtp`) was read with the header reader `st_headers.py` (8 bytes + JSON header per shard; no weight byte was read, no token was opened). Result: **26 shards, 1,045 tensors, every tensor BF16, 71,903,645,408 tensor bytes (66.97 GiB; 71.90 GB)**, equal to `total_size` in `model.safetensors.index.json`. The shards range from 1.10 to 4.00 GB. This replaces the AUTHOR-STATED 73–74 GB.
+
+| Class | Tensors | Parameters | Bytes | GiB |
+|---|---:|---:|---:|---:|
+| Routed experts, 40 trunk layers (`mlp.experts.gate_up_proj` + `down_proj`) | 80 | 32,212,254,720 | 64,424,509,440 | 60.000 |
+| Trunk other (attention, DeltaNet, router, shared expert, norms) | 611 | 1,431,237,248 | 2,862,474,496 | 2.666 |
+| Input embedding | 1 | 508,559,360 | 1,017,118,720 | 0.947 |
+| Output head (`lm_head`, not tied) | 1 | 508,559,360 | 1,017,118,720 | 0.947 |
+| MTP block (`mtp.*`; 2 expert tensors + 17 others) | 19 | 844,640,768 | 1,689,281,536 | 1.573 |
+| Vision tower (`model.visual.*`) | 333 | 446,571,248 | 893,142,496 | 0.832 |
+| **Total** | **1,045** | **35,951,822,704** | **71,903,645,408** | **66.965** |
+
+(Text + MTP parameters: 35,505,251,456; trunk without MTP: 34,660,610,688. The vision tower adds 446,571,248.)
+
+What the layout means for Stage A:
+
+1. **The routed experts are fused, not per-expert.** Each layer has `mlp.experts.gate_up_proj` of shape [256, 1024, 2048] and `mlp.experts.down_proj` of shape [256, 2048, 512]. The first 512 rows of each expert's `gate_up_proj` are gate and the last 512 are up. READ-SRC: llama.cpp's `conversion/qwen.py` at the pinned commit splits `gate_up_proj` on the row axis (`dim = −2`) into `gate_proj` and `up_proj`, and uses `down_proj` as it is; the split is a pure slice, so it is exact before quantization. Rows are 2,048 (gate, up) and 512 (down) values long, both multiples of 256, so every row is a whole number of Q4_K/Q6_K super-blocks.
+2. **The largest single tensor is the fused `gate_up_proj` at 1,024 MiB** (40,960 MiB over 40 layers, DERIVED), then the two 970 MiB embedding tensors. A one-tensor-at-a-time design therefore needs a few GiB of host RAM for the tensor in flight, not the 66.97 GiB of the whole model; the real peak is still measured (T1b).
+3. **The MTP block is in the checkpoint and the converter keeps it by default.** READ-SRC: `convert_hf_to_gguf.py` at the pinned commit has `--no-mtp`; without it `block_count` becomes 41 and `nextn_predict_layers` is 1, which is the layout 4.1 already records for the served file. The P-X0 reference is therefore converted in the default mode, and Stage A writes the same 41 blocks.
+4. **The vision tower (333 tensors, 0.832 GiB) is not part of a text GGUF.** UNVERIFIED which of the converter's classes drops it and how: P-X0 counts the reference file's tensors and P-X6 compares the count with the 712 text-and-MTP tensors above (1,045 − 333). Stage A does not read `model.visual.*`.
+5. **Names carry the `model.language_model.` prefix** (and `mtp.` for the MTP block); the converter's name map handles both. P-X6 compares the names tensor by tensor.
+6. **Nothing in the shards has been read or hashed yet.** The shard SHA-256 provenance (T1b) is computed when Stage A first runs; the author's files stay where they are, and the trainer never downloads.
+
 
 ### 4.3 Why the core needs more than its served bits — the delta-versus-step problem, quantitatively
 
@@ -540,7 +570,7 @@ A rough model (ESTIMATE; assumptions: Gaussian weights per 32-block, block range
 
 Noise ratio Q4_K : Q6_K : Q8_0 ≈ 17 : 4 : 1. The model already tolerates 9.2 % σ of noise per matrix (that *is* `Q4_K_M`; +0.24 PPL on Llama-3.1-8B per the published study, PUBLISHED), so adding 0.55 % σ is a variance increase of about 0.35 % of what is already there.
 
-**Revision after the engine audit (Chapter 16, 2026-10-23).** The model above says 8-bit is the safest merge target. It does not say 8-bit is *affordable*: the engine's 7.5 GiB bank leaves 0.16 GiB (default prefill micro-batch) or none (`-ub 2048`) of VRAM under the 10.7 GiB ceiling for everything the core adds (it was ≈ 0.36 / 0.11 GiB at 10.9, and about 1 GiB if the ceiling is read as a limit on the process's own allocations: 16.3.1), depending on the prefill micro-batch (DERIVED from the engine's measured peaks, 16.5 B2), an all-Q8_0 core adds 0.59 GiB, and the engine's kernels are planned for `Q4_K`, `Q6_K` and `F32` only (the engine blueprint; Q8_0 is planned only for the KV cache). So the rule is now: **raise a class above its served type only as far as the byte budget and the engine's supported types allow, and use Mode Q (4.10) to close the remaining merge gap at zero extra bytes.** Q8_0 remains a candidate for classes where P-Q3 shows Q6_K is not enough *and* the budget has room.
+**Revision after the engine audit (Chapter 16, 2026-10-23).** The model above says 8-bit is the safest merge target. It does not say 8-bit is *affordable*: the engine's 7.5 GiB bank leaves 0.16 GiB (default prefill micro-batch) or none (`-ub 2048`) of VRAM under the 10.7 GiB ceiling for everything the core adds (it was ≈ 0.36 / 0.11 GiB at 10.9, and about 1 GiB if the ceiling is read as a limit on the process's own allocations: 16.3.1), depending on the prefill micro-batch (DERIVED from the engine's measured peaks, 16.5 B2), an all-Q8_0 core adds 0.59 GiB, and the engine's kernels are planned for `Q4_K`, `Q6_K` and `F32` only (the engine blueprint; Q8_0 is planned only for the KV cache). So the rule is now: **raise a class above its served type only as far as the byte budget and the engine's supported types allow, and use Mode Q (4.10) to close the remaining merge gap at zero extra bytes.** Q8_0 remains a candidate for classes where P-Q3 shows Q6_K is not enough *and* the budget has room. **Ruling, 2026-10-24 07:39 (D31, D32):** the rule's first half is now an override, not the default. The default is Mode Q at the served types (zero extra bytes). The type raises of this paragraph and of 9.4 run only when the user switches them on in Advanced/Developer (for example on a GPU of 16 GB or more, or with smaller expert banks).
 
 **What this model does not tell us** (so it is a probe, not a fact): the actual size of ΔW on this model (3 % σ is an assumption; **UNVERIFIED**), whether Q6_K is enough for the larger-delta tensors, and the real functional effect. **P-Q3** measures ‖ΔW‖/‖W‖ per tensor class from the existing v0.2 adapter and the KL of each merge variant against the unmerged adapter, using only llama.cpp tools plus a small writer.
 
@@ -548,12 +578,12 @@ Noise ratio Q4_K : Q6_K : Q8_0 ≈ 17 : 4 : 1. The model already tolerates 9.2 %
 
 | ID | Core in the exported file | Drift vs trained | Serving cost | Verdict |
 |---|---|---|---|---|
-| E-A | Base unchanged + **GGUF LoRA adapter** | none (the adapter is exactly what was trained, applied at run time by `build_lora_mm`) | ~620 extra small matmuls per token (310 modules × 2). If each costs 10–20 µs: +6–12 ms/token on a 24.6 ms/token engine timeline (ESTIMATE; P-X3 measures) | Always produced as the **reference**; not the production default |
-| E-B | Merged into **Q8_0** | Q8_0 rounding noise (≈ 0.55 % σ, ESTIMATE) | +607 MiB VRAM vs served mix (+0.59 GiB) if applied to the whole core; same graph, no extra ops; a type the engine's weight kernels are not planned to support | **Candidate** per class, only inside the byte budget and if the engine supports the type (D22) |
-| E-C | Merged into **Q6_K** for classes where P-Q3 shows ‖ΔW‖/step is high enough | Q6_K noise (≈ 2.2 % σ) | +282 MiB (+0.28 GiB) vs served mix if applied to the whole core; a type already in the served file and in the engine's kernel set | **Default candidate (D4 revised, D22)**, per class, if P-Q3 passes |
+| E-A | Base unchanged + **GGUF LoRA adapter** | none (the adapter is exactly what was trained, applied at run time by `build_lora_mm`) | ~620 extra small matmuls per token (310 modules × 2). If each costs 10–20 µs: +6–12 ms/token on a 24.6 ms/token engine timeline (ESTIMATE; P-X3 measures) | Always written. Under Mode Q (the default) it is **informational, not the reference**: training saw `W_eff`, not `W_base + ΔW`, so serving base + adapter is a nearby function, not the trained one. It is the zero-drift reference only when Mode Q is off (D31) |
+| E-B | Merged into **Q8_0** | Q8_0 rounding noise (≈ 0.55 % σ, ESTIMATE) | +607 MiB VRAM vs served mix (+0.59 GiB) if applied to the whole core; same graph, no extra ops; a type the engine's weight kernels are not planned to support | **Override** (Advanced/Developer, D32), per class, only inside the byte budget and if the engine supports the type (D22) |
+| E-C | Merged into **Q6_K** for classes where P-Q3 shows ‖ΔW‖/step is high enough | Q6_K noise (≈ 2.2 % σ) | +282 MiB (+0.28 GiB) vs served mix if applied to the whole core; a type already in the served file and in the engine's kernel set | **Override** (Advanced/Developer, D32), per class, if P-Q3 passes; no longer the default (D4 revised twice) |
 | E-D | Merged at the *served* type (Q4_K/Q6_K) | delta erased/dithered (Case 1) | 0 | **Rejected** |
 | E-E | Merged to bf16/F16 | none | +1.82 GiB vs served mix | Rejected: nothing to gain over Q8_0 beyond rounding already below the float spread |
-| E-F | **Mode Q (4.10):** the core is trained *through* the exact quantizer of its target type (served type or Q6_K), so the exported bytes are the bytes that were trained | none, by construction (the quantizer is bit-exact against ggml, P-E6) | 0 extra bytes at the served type; +282 MiB at most if all Q6_K | **Gated option (D23)**: tried when E-C fails P-Q3 for a class, or when the byte budget leaves no room |
+| E-F | **Mode Q (4.10):** the core is trained *through* the exact quantizer of its target type (the served type by default; Q6_K as an override), so the exported bytes are the bytes that were trained | none, by construction (the quantizer is bit-exact against ggml, P-E6); a design target until P-E6 and P-X2 report | 0 extra bytes at the served type; +282 MiB at most if all Q6_K | **Default (D31, since 2026-10-24).** Still gated by P-E6 (bit-exact quantizer port) and checked by the ablation T-A11; E-B and E-C are Advanced/Developer overrides (D32) |
 
 "Isolated" means three concrete things: (1) the core tensors are their own named group in code (`TrainableCore` vs `FrozenStore`), so the type system prevents a frozen tensor from being written; (2) in the exported GGUF they are the only tensors whose data differs from the input file, which the exporter proves by hashing everything else; (3) at serving time they are the spine, resident on the GPU, so the engine can budget them as a block (the byte budget of 16.4, B2).
 
@@ -601,16 +631,18 @@ Ordered cheapest-first. Each rung has the probe that decides whether to take it.
 2. Forward mode F → R, or R → F (P-Q6).
 3. Chunk-GEMM fragments bf16 → tf32 → fp32 in DeltaNet (P-Q7).
 4. Attention internals fp16 ↔ bf16 ↔ fp32 (P-Q7).
-5. Core class served type → Q6_K → Q8_0, each step only inside the byte budget and the engine's supported types (P-Q3, P-E4, P-E5).
-6. Mode Q (4.10): train through the exact quantizer of the target type, closing the merge gap at zero extra bytes (P-E6, P-E7).
-7. Core export → adapter-only (E-A) for a release that must be zero-drift, accepting the serving cost (P-X3).
+5. Mode Q (4.10) is the starting point (D31). If a class stalls or the GPU quantizer is not bit-exact (P-E6, P-E7, T-A11): use the CPU quantizer port for that class, then a lower learning rate and the EMA of A, B.
+6. Core class served type → Q6_K → Q8_0 as a manual Advanced/Developer override (D32), each step only inside the byte budget and the engine's supported types (P-Q3, P-E4, P-E5).
+7. Core export → adapter-only (E-A) for a release that must be zero-drift in the adapter sense, accepting the serving cost (P-X3).
 
 ### 4.9 What is deliberately *not* promised
 
-* "4-bit trained beats Q5" and "0.00 % drift" (proposal claims) are **UNVERIFIED**. The first is untested; the second is true only for tensors we splice (hash-proven), not for the merged core.
+* "4-bit trained beats Q5" and "0.00 % drift" (proposal claims) are **UNVERIFIED**. The first is untested; the second is true for tensors we splice (hash-proven); for the merged core it is the design target of Mode Q (the exported bytes are the trained bytes), to be shown by P-E6, P-X1 and P-X2.
 * Nothing here claims a benchmark improvement. The precision plan's job is to ensure the gap between *trained* and *served* is small, measured, and attributable.
 
-### 4.10 Mode Q — merge-aware training through the exact quantizer (D23; gated option)
+### 4.10 Mode Q — merge-aware training through the exact quantizer (D23; the default path since 2026-10-24, D31)
+
+**Status.** Ruled the default export path by the author on 2026-10-24 (07:39): the core keeps its served types, the export adds +0 bytes, and the byte-budget solver is an override (D32). The ruling does not remove the technical gates: P-E6 (bit-exact quantizer port) must pass before Mode Q is trusted, and the ablation T-A11 checks the default after export. In this document "Advanced/Developer" (the author's word) is the Expert mode of U11.
 
 **Idea.** If the file will hold `Q_T(deq(W_base) + ΔW)` for a target type `T`, train the model *as that function*: the forward pass uses the quantized-effective weights, so the exported bytes are exactly the weights the loss saw. The merge gap is then zero by construction, at any type — including the served type, which costs no extra bytes. This is quantization-aware training whose quantizer is the real one.
 
@@ -622,11 +654,11 @@ Ordered cheapest-first. Each rung has the probe that decides whether to take it.
 4. `A`, `B` (fp32 masters) are the high-precision shadow that accumulates updates smaller than a grid step; weights flip when the shadow crosses a threshold.
 5. At export, `W_eff` of the last step is written as the tensor — bit-for-bit what was trained.
 
-**Costs (ESTIMATE; P-E7 measures).** Per optimizer step: read the core's base bytes (0.8 GiB), form the rank-16 delta in registers, quantize, write the packed result (≤ 1.1 GiB): memory traffic of ≈ 3 GB ≈ 10 ms at the card's bandwidth, plus the quantizer's arithmetic (the Q4_K and Q6_K reference searches iterate; the heaviest part). Against steps of seconds this is below 5 %. VRAM: base bytes (0.80 GiB, already in the plan) **plus** a `W_eff` copy (0.8–1.1 GiB) — inside the 3.0 GiB headroom of 5.3.
+**Costs (ESTIMATE; P-E7 measures).** Per optimizer step: read the core's base bytes (0.8 GiB), form the rank-16 delta in registers, quantize, write the packed result (≤ 1.1 GiB): memory traffic of ≈ 3 GB ≈ 10 ms at the card's bandwidth, plus the quantizer's arithmetic (the Q4_K and Q6_K reference searches iterate; the heaviest part). Against steps of seconds this is below 5 %. VRAM: base bytes (0.80 GiB, already in the plan) **plus** a `W_eff` copy (0.8–1.1 GiB, ESTIMATE). Against the 7.90 GiB total of 5.3 that leaves 10.7 − (7.90 + 0.8…1.1) = **1.7–2.0 GiB** of headroom (DERIVED); the 2.8 GiB figure of 5.3 is the headroom before this copy.
 
 **Risks.** (1) STE through a coarse grid can stall or oscillate near thresholds; mitigations: learning-rate warm-up, an exponential moving average of `A`, `B` for the exported state. (2) Reproducing ggml's quantizer bit-for-bit on the GPU requires matching its floating-point operation order; the CPU port is exact by construction and is the fallback (slower, still affordable: ~1.4 B parameters per step on 8 cores). (3) In Mode Q the unmerged adapter GGUF is **not** the reference (training never saw `W_base + ΔW`); the merged file is the reference and the adapter is emitted for information only.
 
-**Decision rule.** Try E-C (type raise, inside the byte budget) first because it needs no new machinery. Use Mode Q for any class where E-C fails P-Q3 or the budget has no room; run the ablation T-A11 (Mode Q at the served type vs LoRA-then-merge at Q6_K) and keep whichever has the lower held-out cross-entropy *after* export, measured through llama.cpp.
+**Decision rule (revised 2026-10-24, D31).** Mode Q at the served types is the default for every core class. The ablation T-A11 (Mode Q at the served type vs LoRA-then-merge at Q6_K) is run as a check on that default, not as a way to earn it. If, after export and measured through llama.cpp, LoRA-then-merge at Q6_K gives a clearly lower held-out cross-entropy for a class and the user's GPU has the bytes for it, the report says so and the Advanced/Developer override (D32) is offered for that class; the default changes only on the author's word. Design targets, not results: zero merge drift at the export step (the exported bytes are the trained bytes; P-X1 proves the splice, P-E6 the quantizer), and a train→serve KL limited by serving arithmetic. The float spread σ_float is re-measured on the new base (P-Q4); the values 0.017353 and 0.018286 belong to the earlier served file and its 16 × 1,024-token test set (16.5 B3), and are not carried over.
 
 ---
 
@@ -666,6 +698,8 @@ pelias-trainer/
 │  ├─ plan/       probe_constants.{h,cc}  roofline_solver.{h,cc}  memory_plan.{h,cc}
 │  ├─ io/         gguf_reader.{h,cc}  gguf_writer.{h,cc}  block_types.h  sha256.{h,cc}
 │  │              safetensors.{h,cc}   (adapter / checkpoint interchange, test oracle exchange)
+│  ├─ config/     trainer_config.{h,cc}   (defaults: Mode Q, Δ_max = 0, planner automatic; Advanced/Developer overrides)
+│  ├─ ingest/     ingest_plan.{h,cc}      (Stage A: bf16 safetensors → pelias_base_0step.gguf; D33)
 │  ├─ tok/        tokenizer.{h,cc}  chat_template.{h,cc}      (wrap libllama / common)
 │  ├─ data/       dataset.{h,cc}  packer.{h,cc}  masks.{h,cc}  audit.{h,cc}
 │  ├─ model/      spec.{h,cc}  frozen_store.{h,cc}  trainable_core.{h,cc}  lora.{h,cu}  tape.{h,cu}
@@ -695,15 +729,18 @@ pelias-trainer/
 
 ```
 hal  ◄── plan, io, stream, kern, verify
-io   ◄── model, export, data(masks need tok), verify
+io   ◄── model, export, data(masks need tok), verify, ingest
+config ◄── export, ingest   (plan and train join when they are written)
 tok  ◄── data
 kern ◄── sched
 model ◄── sched, train, export
 stream ◄── sched
 sched ◄── train
 data ◄── train
-train, export, verify ◄── cli
+train, export, verify, ingest ◄── cli
 ```
+
+**Modules added by the framework since this tree was drawn** (their one-line roles and the single-sourced dependency list are in `src/README.md` and `tools/check_module_deps.py`): `project` (needs `io`), `startup` (`hal`, `plan`, `io`, `project`), `intake` (`data`, `tok`), `help` (none), `warn` (`data`, `verify`, `intake`), `flow` (`plan`, `startup`, `project`, `intake`, `warn`, `verify`, `help`), `serve` (`project`), `ui` (none, header-only so far). They carry the universal-use points of 3.3 (U1–U11) and are built after the top-tier gate.
 
 **Module responsibilities (each is one reviewable unit; this is also the order they are written in Chapter 12):**
 
@@ -712,6 +749,8 @@ train, export, verify ◄── cli
 | `hal` | Device selection, stream/event wrappers, arena allocator (bump + lifetimes), pinned pool, **VRAM governor** (hard 10.7 GiB, 5.3/15.1), `sync_audit` (debug mode: after every launch, record and check owner-stream rules) | `Arena::alloc(bytes, lifetime)`, `Governor::reserve()` | from the spec: plan1-mod1 `hal_arena`, rewritten |
 | `plan` | Reads `probe_constants.json` (measured rates, bandwidths, smem), solves for window sizes, slot count, K, resident-tail length, and prints the plan before any allocation | `RooflineSolver::solve()` | from the spec: plan1-mod2 `roofline_solver` |
 | `io` | Memory-maps the GGUF; indexes tensors; typed views of block data; writes a new GGUF by splicing; SHA-256 of tensor payloads | `GGUFFile`, `TensorView`, `splice_write()` | block structs adapted from ggml-common.h (MIT); rest original |
+| `config` | The one configuration struct: core mode (Mode Q by default), `Δ_max` (0 by default), the D22 promotion toggles (off by default), planner overrides (empty by default), Advanced/Developer switch | `TrainerConfig`, `validate()` | original |
+| `ingest` | Stage A: reads the bf16 safetensors header and shards one tensor at a time, applies the conversions of P-S2/P-S3, picks each tensor's type by the stock Q4_K_M rule, quantizes with the P-E6 port, writes `pelias_base_0step.gguf` with provenance keys | `IngestPlan`, `run_stage_a()` | conversions follow llama.cpp's converter (MIT) as the oracle, code original |
 | `tok`, `data` | Tokenize and render exactly like the server; pack; mask; audit | `Tokenizer`, `render_chat()`, `pack_step()` | wraps libllama/common (MIT) |
 | `model` | `ModelSpec` from GGUF metadata; `FrozenStore` (read-only mapped tensors: experts, embedding, lm_head, router, small tensors) and `TrainableCore` (LoRA state, optional gates/norms); routing `Tape` | | original |
 | `stream` | Expert streamer (pinned store → device slots), boundary store (host copies of layer inputs) | `ExpertStreamer::acquire(layer)` | from the spec: plan2 3-stream DMA |
@@ -740,11 +779,13 @@ train, export, verify ◄── cli
 | Cross-entropy chunk (256 positions × 248,320, fp32 logits + workspace) | 0.65 | MEASURED in v0.2 (F152) |
 | Routing tape and index buffers | 0.02 | DERIVED |
 | *Mode L only (7.12): trainable router copy + gradient + Adam m, v (21.5 M × 16 B)* | *+0.32 (not in the total)* | *DERIVED; fits in the headroom* |
+| *Mode Q (the default, 4.10): `W_eff` copy of the core, in the core's own quantized formats* | *+0.8…1.1 (not in the 7.90 total)* | *ESTIMATE (4.10); P-M2 measures* |
 | Safety margin | 0.50 | DECISION |
 | **Total** | **7.90** | |
 | **Headroom under 10.7 GiB** | **2.8** | |
+| **Headroom with the Mode Q `W_eff` copy** | **1.7–2.0** | DERIVED: 10.7 − (7.90 + 0.8…1.1) |
 
-Headroom is spent, in order of value, by the roofline solver: a third expert slot (+0.49 GiB), more tape/window slots, a higher LoRA rank (r = 32: +0.32 GiB; r = 64: +0.96 GiB), keeping the last expert layers resident (each +0.42–0.49 GiB, saves one fetch per pass).
+Headroom (1.7–2.0 GiB after the Mode Q copy, 2.8 GiB without it) is spent, in order of value, by the roofline solver: a third expert slot (+0.49 GiB), more tape/window slots, a higher LoRA rank (r = 32: +0.32 GiB; r = 64: +0.96 GiB), keeping the last expert layers resident (each +0.42–0.49 GiB, saves one fetch per pass).
 
 **Per-layer working-set accounting (T = 8,192; bf16 activations unless noted) — this is what P-M2 measures:**
 
@@ -869,7 +910,7 @@ The MTP block (`blk.40`) is one more full-attention + MoE layer with its own rou
 
 | Family | Kernels | Replaces in v0.2 | Adapted from the proposals' "six families" |
 |---|---|---|---|
-| **G** quantized GEMM | G1 dense fwd (bf16), G2 dense fwd (int8), G3 grouped fwd + SwiGLU epilogue (bf16), G4 grouped fwd (int8), G5 dense dgrad, G6 grouped dgrad, G7 LoRA fwd/bwd, G8 dequant reference, G9 `q8_1` activation quantizer | Triton/torch dequant + grouped mm | family 1–2 |
+| **G** quantized GEMM | G1 dense fwd (bf16), G2 dense fwd (int8), G3 grouped fwd + SwiGLU epilogue (bf16), G4 grouped fwd (int8), G5 dense dgrad, G6 grouped dgrad, G7 LoRA fwd/bwd, G8 dequant reference, G9 `q8_1` activation quantizer, GQ Mode Q requantizer (the `W_eff` builder; 4.10) | Triton/torch dequant + grouped mm | family 1–2 |
 | **R** routing | R1 router + softmax + top-8, R2 counting sort + tile map, R3 combine fwd/bwd (includes router-weight gradient) | `counts.tolist()` host sync, Python loops | family 3 |
 | **E** elementwise | E1 RMSNorm fwd/bwd, E2 SwiGLU fwd/bwd, E3 gated RMSNorm (DeltaNet) fwd/bwd, E4 L2-norm fwd/bwd, E5 residual / cast / embedding gather | PyTorch eager | family 3 |
 | **A** attention | A1 RoPE (IMRoPE), A2 fused fwd, A3 fused bwd, A4 blocked reference (also the fallback), A5 output-gate, A6 q/k per-head RMSNorm | SDPA | family 4 |
@@ -1070,6 +1111,7 @@ Training per token = forward 6.74 + recompute 5.72 (everything except the lm_hea
 |---|---|---|
 | G8 dequant | ggml `dequantize_row_*` | **bit-exact** |
 | G9 `q8_1` quantizer | ggml `quantize_q8_1` | **bit-exact** (codes, `d`, `s`) |
+| GQ Mode Q requantizer | ggml `quantize_row_q4_K_ref`, `_q6_K_ref`, `_q8_0_ref` | **bit-exact** (codes, `d`, `dmin`, packed scales; P-E6) |
 | G1/G3 bf16 GEMM | fp64 GEMM of the *same bf16-rounded inputs* | rel. L2 ≤ 1e-6 (accumulation order only) |
 | G2/G4 int8 GEMM | CPU integer reference (exact integer part) + fp32 epilogue | integer part bit-exact; output rel. L2 ≤ 1e-6 |
 | G5/G6 dgrad | fp64 | rel. L2 ≤ 1e-6 vs same-input reference |
@@ -1179,7 +1221,7 @@ At 1,200–1,500 tok/s (target, DERIVED) a parity run (≈ 3.0 M processed token
 | T-A8 | LoRA on lm_head | off / on | eval loss; export size |
 | T-A9 | Expert-subset LoRA (ESFT-style, a few layers) | off / on | eval loss; engine cost — only if A1–A8 leave a gap |
 | T-A10 | Locality-aware router training (Mode L, 7.12) | C0 vs λ_res sweep, CE-only control, two router lrs | G-L1…G-L4 |
-| T-A11 | Merge-aware training (Mode Q, 4.10) | LoRA-then-merge vs Mode Q, at the served type and at Q6_K, per core class | post-export held-out CE through llama.cpp; step overhead (P-E8) |
+| T-A11 | Check on the Mode Q default (4.10, D31) | LoRA-then-merge vs Mode Q, at the served type and at Q6_K, per core class | post-export held-out CE through llama.cpp; step overhead (P-E8) |
 | T-A12 | Bank-aware variants (16.5 B1): zero-miss hinge on target layers (L-Z); clamped-forward absorb then router align (L-C); distillation anchor | plain Mode L vs +hinge vs L-C; λ_zm, δ, k_T from the B1.1 table; two router lrs | G-Z1…G-Z4 (16.5 B1.5) |
 | T-A13 | Bimodal-faithful forward and outlier regularizer (Mode B / N, 16.5 B5) — only if P-E12 passes | off / B / N / B+N | CE; K3 on the engine's test set |
 
@@ -1293,8 +1335,8 @@ For each assistant turn, render the prompt with `add_generation_prompt = true` a
 
 | Output | Purpose |
 |---|---|
-| `adapter.gguf` | GGUF LoRA adapter — **zero-drift reference**; also directly servable with `--lora` |
-| `merged-core.gguf` | the production candidate: every unchanged tensor byte-identical to the base, the core at the budgeted per-class types of 9.4 |
+| `adapter.gguf` | GGUF LoRA adapter, always written. The zero-drift reference when Mode Q is off; **informational** under Mode Q (the default), where `merged-core.gguf` is the reference (4.10). Directly servable with `--lora` |
+| `merged-core.gguf` | the production candidate: every unchanged tensor byte-identical to the base; the core at its served types as trained by Mode Q (the default, +0 extra bytes), or at the per-class types of 9.4 when the Advanced/Developer override is on |
 | `export_report.json` | base SHA-256, per-tensor SHA-256 table (unchanged tensors), core types and sizes, merge error statistics per class, KL results, tool versions |
 | `expert_usage.json` | per-layer, per-expert selection counts accumulated from the tape over the training set (hot-bank re-profile input for the engine) |
 | `ckpt/` | final four-registry checkpoint |
@@ -1306,7 +1348,7 @@ Written per `convert_lora_to_gguf.py` conventions: `general.type = adapter`, `ad
 ### 9.3 The merged-core GGUF — byte-splice
 
 1. Open the base GGUF read-only (memory-mapped). Parse tensor infos.
-2. For each **core** tensor `W`: stream tiles; `W_eff = dequant(W_base) + (α/r)·B·A` in fp32 (dequantization by the G8 reference; the delta by an fp32 GEMM); quantize to the class's target type with ggml's reference quantizer (Q8_0: `d = amax/127`, `q = round(x/d)`; Q6_K and Q4_K: the reference search ported from `ggml-quants.c`, MIT); store `d`, `dmin` as f16 and the packed 6-bit scales exactly as ggml does. Bit-exactness of each quantizer against ggml is probe P-E6 (it extends P-Q1, which covers dequantization). In Mode Q the bytes are those of the last `W_eff` (4.10) and this step is a copy.
+2. For each **core** tensor `W`: stream tiles; `W_eff = dequant(W_base) + (α/r)·B·A` in fp32 (dequantization by the G8 reference; the delta by an fp32 GEMM); quantize to the class's target type with ggml's reference quantizer (Q8_0: `d = amax/127`, `q = round(x/d)`; Q6_K and Q4_K: the reference search ported from `ggml-quants.c`, MIT); store `d`, `dmin` as f16 and the packed 6-bit scales exactly as ggml does. Bit-exactness of each quantizer against ggml is probe P-E6 (it extends P-Q1, which covers dequantization). In Mode Q (the default) the bytes are those of the last `W_eff` (4.10) and this step is a copy; the quantize-after-training path described here is the override path (D32).
 3. Tensors with trainable norms/gates: F32 values from the registries.
    **Mode L only (7.12):** the 41 router tensors (`ffn_gate_inp`) are also rewritten, as F32 from the router registry; they are verified equal to the checkpoint, not to the base.
 4. Rewrite the header: new tensor infos (type, size, offset) for changed tensors; all other infos unchanged except offsets; alignment 32; all KV metadata copied; add `pelias.*` provenance keys (trainer version, base SHA-256, run id, core type) — ignored by llama.cpp; `general.file_type` left as in the base.
@@ -1314,7 +1356,9 @@ Written per `convert_lora_to_gguf.py` conventions: `general.type = adapter`, `ad
 6. **Proof:** after writing, re-open and hash every unchanged tensor payload; the report lists `unchanged: N tensors, identical: N`. In Mode L the list of changed tensors is core + routers; the report names both classes and their counts. A mismatch aborts and deletes the partial file.
 7. Space gate before starting: the export needs ≈ 21 GB free on the destination drive (the older export scripts' `need` check, kept); the destination is never the drive holding the served GGUF unless space is verified.
 
-### 9.4 Core type assignment — a byte-budget solver (D22)
+### 9.4 Core type assignment — the default (served types, Δ_max = 0) and the byte-budget solver (D22, optional override)
+
+**Default (D31, D32).** `Δ_max = 0`: every core class keeps its served type from the Stage A type map (the stock Q4_K_M mix) and the exported core is the Mode Q result (4.10), +0 extra bytes, so the export never depends on spare engine VRAM. The solver below runs only when the user switches the override on in Advanced/Developer (for example a GPU of 16 GB or more, or smaller expert banks); `Δ_max` is then the byte budget described here. In the configuration (`src/config`) `delta_max_bytes` defaults to 0 and every `promote_*` toggle defaults to off.
 
 **Inputs.** (1) The served type of every core tensor (READ-SRC). (2) The engine's supported weight types (P-E5; today `Q4_K`, `Q6_K`, `F32`; `Q8_0` only if the engine adds it). (3) The byte budget `Δ_max` = ceiling (10.7 GiB) − the engine's measured peak at the chosen bank size and context − a 0.1 GiB margin (P-E4; DERIVED at the 7.5 GiB bank from the engine's measured whole-card peaks: **0.16 GiB at the default micro-batch** (peak 10.40–10.44 GiB) and **none at `-ub 2048`** (peak 10.67–10.69 GiB; −0.09 GiB after the margin). If the ceiling is read as a limit on the process's own allocations the same peaks leave ≈ 1.2 / 0.9 GiB (16.3.1, decision 7). `Δ_max` is therefore a function of the engine's prefill micro-batch; the solver is run for the micro-batch the engine ships with). (4) The retention table of P-Q3 per class and type.
 
@@ -1404,11 +1448,15 @@ Each gate writes one `verify_<gate>.json` (probe ids, labels, numbers, threshold
 
 It does not prove the model is *better* for the author's purpose — that is rung 9 and the ablation programme. It proves the trainer computes what the serving stack computes (rungs 1–3), that its gradients are right (4), that scheduling does not change results (5), that it trains on the right tokens (6), and that the file is exactly what was trained (7–8). Each of those is a claim the v0.2 trainer could not support (Chapter 2.6, findings F1–F9).
 
+### 10.6 Which files the oracles run on (ruling 2026-10-24 07:39, D36)
+
+The earlier trainer's outputs (its GGUF, its adapter) are **not** used for per-layer parity. Forward parity (rungs 2–3) uses oracle A: llama.cpp commit `2ca15f540` with `eval-callback` on the **clean baseline GGUF**, which is the file llama.cpp's own tools make from the bf16 safetensors (the P-X0 reference). It is not the Pelias 0-step file until P-X6 shows the two are identical, because an oracle must not share the quantizer it checks. The tolerance is the float spread σ_float re-measured on that file (P-Q4); the engine's 0.017353 / 0.018286 belong to the earlier served file and are used only for the reproduction step of B3. Backward parity (rung 4) uses oracle B (fp64) and oracle C (PyTorch fp32 autograd) on a 4-layer slice. These rungs are built at the verification stage, not before it.
+
 ---
 
 ## 11. Probe catalogue
 
-**100 probes.** Each turns a number or claim that is not yet verified into a measurement. A probe is a *specification*: a question, a method, a pass/fail rule, the file it writes, and the stage at which it can first be run. The hardware set (P-H1 to P-H10, P-H12, P-H13, P-M3, P-M4) now exists as one standalone program and its results are in 11.12; every other probe becomes a small program that writes one result file when the author says go. Anything this document marks ESTIMATE or UNVERIFIED points at one of these.
+**102 probes.** Each turns a number or claim that is not yet verified into a measurement. A probe is a *specification*: a question, a method, a pass/fail rule, the file it writes, and the stage at which it can first be run. The hardware set (P-H1 to P-H10, P-H12, P-H13, P-M3, P-M4) now exists as one standalone program and its results are in 11.12; every other probe becomes a small program that writes one result file when the author says go. Anything this document marks ESTIMATE or UNVERIFIED points at one of these.
 
 ### 11.1 How to read and run them
 
@@ -1419,7 +1467,7 @@ It does not prove the model is *better* for the author's purpose — that is run
 | **Pass / fail** | The rule that turns the result into a decision. Where no rule is possible the probe says "Record" and names what the record feeds. |
 | **Output** | One JSON per probe (schema in 11.11), plus raw logs. |
 
-**Counts.** Wave 0: **47** probes (P-H13 was added on 2026-10-24 when the display-timeout test was built; three of them are the engine's own measurements; two, P-E1 and P-E9, were already run once on 2026-10-23 and are re-run on every candidate). By stage after Wave 0: T1: 1, T2: 4, T3: 6, T4: 4, T5: 2, T6: 3, T7: 2, T8: 2, T9: 4, T10: 2, T11: 4, T12: 7, T13: 2, T14: 10.
+**Counts.** Wave 0: **47** probes (P-H13 was added on 2026-10-24 when the display-timeout test was built; three of them are the engine's own measurements; two, P-E1 and P-E9, were already run once on 2026-10-23 and are re-run on every candidate). By stage after Wave 0: T1: 1, T1b: 2, T2: 4, T3: 6, T4: 4, T5: 2, T6: 3, T7: 2, T8: 2, T9: 4, T10: 2, T11: 4, T12: 7, T13: 2, T14: 10.
 
 **Running rules.** (1) Launched by the author: from WSL, or on Windows-native by the one PowerShell script the author permitted on 2026-10-23 (it reads facts, builds and runs the same program; it changes no setting and installs nothing); no other use of PowerShell. (2) One probe at a time, with P-H8 (free VRAM) and the machine-state record first. (3) Results go to a new dated folder; nothing is overwritten. (4) The VRAM governor's 10.7 GiB ceiling applies to probes too. (5) Dataset-derived outputs are counts and pass flags only. (6) The HF token is never read or printed. (7) A probe that needs the author's files (the v0.2 adapter for P-Q3, the bf16 source for P-X0) asks for the path first. (8) Memory-spike check (added 2026-10-24): every run writes a GPU-memory log, `vram_log.tsv` (used and free before and after each probe); `SETTLE=1` / `-Settle` waits, before each probe, until used memory is back to the run's starting level plus 64 MiB (the P-M1 agreement size) for at most 60 s; `RETRY_ON_FAIL=1` / `-RetryOnFail` reruns a short probe that exited 2 or 3 (never P-H4, P-M3, P-H13) once plain and once after settling, tags the files `retry_plain` / `retry_settled`, and states which passed (3.3, U5).
 
@@ -1467,6 +1515,8 @@ Efficiency ε = achieved ÷ P-H3 peak. Shapes are the model's real ones: DeltaNe
 | **P-K11** | Is the fused chunked cross-entropy exact and no slower than the lm_head GEMM it contains? | 256-position chunks over the 248 320 vocabulary, only weight > 0 rows, vs fp64. | loss rel. ≤ 1e-6, `dh` rel. L2 ≤ 1e-5, time ≤ 1.1 × the bare lm_head GEMM. | `k11_ce.json` | T4 |
 | **P-K12** | Is the LoRA-in-epilogue fusion faster than separate LoRA GEMMs? | Fused vs two small GEMMs on all 310 module shapes. | Fused ≥ 1.1× faster, else keep separate (simpler). | `k12_lora_epilogue.json` | T3 |
 | **P-K13** | What does deterministic gradient reduction cost versus atomics? | LoRA weight-gradient reduction at T = 8 192 in both modes. | Deterministic ≤ +3 % step time → stays the default. Otherwise `fast` mode is offered only for sweeps, never for gates. | `k13_det.json` | T9 |
+
+**Batch C — the four kernel-efficiency probes as one run (D35).** P-K1, P-K2, P-K3 and P-Q10 run together, like the hardware set whose results are in 11.12: one script for WSL2 and one for Windows-native, results in a new dated folder. The runner enforces the 10.7 GiB VRAM cap on every sub-test (P-H8 first; a sub-test whose allocation would cross the cap is skipped and recorded, never run), writes GPU clocks, temperature, power and free VRAM before and after every sub-test, and waits a short cooldown between sub-tests (its length is a setting; the temperature it reaches is recorded). The pass rules are those of the rows: P-K1 against cuBLASLt (adopt the hand kernel at ≥ 0.85 ×; reopen the tile design below ε 0.35); P-K2 adopted only at ≥ 1.3× with no accuracy loss (P-Q6); P-K3 recorded (memory-bound or ALU-bound at 60 % of VRAM bandwidth); P-Q10 adopted only at gradient cosine ≥ 0.999 and ≥ 1.3×.
 
 ### 11.4 Numerics and served-model semantics (P-Q, P-S)
 
@@ -1534,12 +1584,14 @@ These decide whether the file is exactly what was trained, and what it costs the
 
 | ID | Question | Method | Pass / fail | Output | When |
 |---|---|---|---|---|---|
-| **P-X0** | Are the v0.2 GGUF's expert bytes identical to a fresh `llama-quantize Q4_K_M` (no imatrix) of the original bf16? Which tensors differ? | Per-tensor SHA-256 of both files (own tool or `llama-gguf-hash`). Needs the bf16 source path from the author; the HF token is never touched. | Report identical/different per tensor class. Decides whether the served file or a fresh quantization is the base (D9). | `x0_base_identity.json` | W0 |
+| **P-X0** | What is the reference base: the original bf16 safetensors converted by llama.cpp's `convert_hf_to_gguf.py` and quantized by `llama-quantize Q4_K_M` (no imatrix), both at the pinned commit `2ca15f540`? And how does a third-party Q4_K_M of the same model differ from it, tensor by tensor? | Obtain the bf16 safetensors folder (the author supplies the path; the trainer never downloads); run the two llama.cpp tools; record per-tensor type and SHA-256 of the reference file; compare with the third-party file the author names (own tool or `llama-gguf-hash`). Needs 71.9 GB for the source (MEASURED from the headers, 4.2) plus the converted file (size unmeasured). Convert in the converter's default mode (MTP block kept, 41 blocks) and record the tensor count. | Report identical/different per tensor class and the type map (which tensors are Q4_K, Q6_K, F32). The reference file is the clean baseline of 10.6 and the target of P-X6. The earlier trainer's GGUF is not used (author's ruling, 2026-10-24). | `x0_base_identity.json` | W0 |
 | **P-X1** | Is every non-core (and, in Mode L, non-router) tensor byte-identical in the output? | Re-open the output; hash every unchanged tensor payload. | `identical: N of N`. | `x1_splice.json` | T12 |
 | **P-X2** | What is the export KL: merged GGUF vs the trainer's own reference logits? | Top-256 + lumped-tail reference logits from `eval`; candidate loaded through libllama in `verify`. | KL ≤ 1.0 × σ_float (P-Q4); top-1 agreement and mean \|Δ log-prob\| reported. | `x2_export_kl.json` | T12 |
 | **P-X3** | Does the adapter GGUF, served by stock llama-server, reproduce the trainer, and what does it cost at decode? | `--lora` on the base; KL vs trainer; decode timing with the 310 modules × 2 extra matmuls per token (ESTIMATE +6–12 ms/token). | KL ≤ 1.0 × σ_float; decode cost recorded (the adapter is a reference, not the production default). | `x3_adapter.json` | T12 |
 | **P-X4** | Is the merged GGUF a valid file for every consumer? | Parse with gguf-py; load in llama-server and in the pelias-engine tier build; 20-prompt smoke. | Loads and generates in both; metadata keys intact; `pelias.*` keys ignored. | `x4_validity.json` | T12 |
 | **P-X5** | What does the merged core cost the engine in speed and hit rate? | Engine reference cell (7.0 GiB bank) **and the 7.5 GiB bank**, bypass 32, 3 launches per side, merged vs base; peak VRAM recorded; WSL2 and Windows-native. | Regression ≤ 2 % (ESTIMATE) and peak VRAM ≤ 10.7 GiB at the 7.5 GiB bank. Else the byte-budget solver is re-run with a smaller Δ_max (9.4), Mode Q is used for the classes affected, or Mode L (7.12) buys hit rate back. | `x5_engine.json` | T12 |
+| **P-X6** | Does Stage A (Pelias's own conversion and block quantization of the bf16 safetensors) reproduce the P-X0 reference file? | Run `ingest` on the same folder; compare every tensor: name, shape, type and SHA-256 of the payload. For the non-quantized tensors (norms with the +1 folding, router, conv taps, `ssm_*`, the V-head tiling) compare after P-S2 and P-S3 have confirmed the conventions. | `identical: N of N` is expected if the quantizer is bit-exact (P-E6) and the Stage A type map is the stock Q4_K_M map. A difference is listed by tensor and class: a quantized tensor that differs in one block is a P-E6 failure, a non-quantized one is a conversion bug. The 0-step file is the Stage B input only when this probe passes or every difference has a recorded reason; otherwise Stage B waits for the author. | `x6_ingest.json` | T1b |
+| **P-X7** | How far is each Q4_K_M from the full bf16 model: the Pelias 0-step file, the P-X0 reference, the third-party file, and (re-run at T12) the Mode Q result? | One token set and one method for every file: KL of the top-256 + lumped-tail logits against the bf16 model (reference logits of 10.6) and `llama-perplexity` where the file runs there. The whole bf16 model is 71.9 GB (MEASURED) against 64 GiB of host RAM and 12 GB of VRAM, so whether llama.cpp can run it here, and how fast, is unmeasured; if it cannot, the author chooses a layer subset or another host and the report says which. A published figure is compared only if its protocol is reproduced. | The rule is fixed before the run: the Pelias 0-step file's KL to bf16 is reported beside the reference's and the third-party file's; Stage A is accepted if it is no worse than the reference by more than σ_float (P-Q4). The author's hypothesis that the finished file lies very close to the full model (1.5) has no pass line yet: the result is a number with the stock file's number beside it. | `x7_vs_bf16.json` | T1b |
 
 ### 11.8 Router locality — Mode L (P-L)
 
@@ -1585,7 +1637,7 @@ Defined by the audit of Chapter 16: data the trainer needs from, or must agree w
 |---|---|---|---|
 | 1 Platform baseline | P-H8, P-H1, P-H2, P-H3, P-H4, P-H10 | Everything else is normalised by these; the soak tells whether the overclock can be trusted for a multi-hour run | ε denominators; run clocks; canary policy (15.3) |
 | 2 Transfers and memory | P-H5, P-H6, P-H7, P-M3, P-M4, P-H9, P-H12, P-H13, P-H11 | They set the PCIe-hiding knee, the host memory plan and whether graphs and copy overlap exist | Streamer design (5.4, 5.5); fallbacks of 5.3; platform default |
-| 3 Kernel efficiency | P-K1, P-K2, P-K3, P-Q10 | The speed story rests on ε; if ε < 0.35 the tile design is reopened **before** more kernels are written | Mode R vs F; targets of 1.4 |
+| 3 Kernel efficiency (Batch C: one run, D35) | P-K1, P-K2, P-K3, P-Q10 | The speed story rests on ε; if ε < 0.35 the tile design is reopened **before** more kernels are written | Mode R vs F; targets of 1.4 |
 | 4 Served truth | P-Q4 first, then P-S1, P-S2, P-S3, P-S4, P-S7, P-S8, P-S6, P-S5, P-Q1 | P-Q4 sets every KL gate; P-S1 produces the fixtures the others reuse | KL gates; conventions; MTP wiring; dequant parity |
 | 5 Data, base and engine facts | P-D1, P-T10, P-X0, P-Q3, P-E4, P-E5, P-E6, P-E7, P-E3, P-E12, P-L1, P-L2, P-L9 (P-E1, P-E9 done) | P-Q3 and P-E4/E5 decide the core's types; P-E6 gates Mode Q; P-L1/L2/E3 decide whether Mode L-Z is worth building | Core type assignment (9.4); base file (D9); Mode L go/no-go; Mode B/N go/no-go |
 | 6 Engine-owned | P-E2, P-E10, P-E11 | Measured by the engine project; consumed here | Loss weights (7.12); export layout (9.3, 16.5 B4) |
@@ -1667,24 +1719,26 @@ The order follows one rule: **build the most uncertain thing first, in the cheap
 |---|---|---|---|---|---|---|
 | **T0** | Measure and scaffold | — | Repo tree, CMake, probe programs, Wave 0 results, the one-page switch summary (11.10) | The author has read the summary and signed the switches (precision plan, mode defaults, Δ_max, Mode L go/no-go) | all Wave 0 | L |
 | **T1** | Foundations | T0 | `hal` (device, streams, events, arenas), VRAM governor, `io` (GGUF mmap reader, tensor map), `plan` (memory solver), test harness | Lists all 753 tensors with types; a plan above 10.7 GiB is refused; clean-checkout build twice gives identical test results | P-M1 | M |
+| **T1b** | Base ingest (Stage A) | T1 | `config` defaults; `ingest` (safetensors reader, name and shape map, the conversions of P-S2/P-S3, the stock Q4_K_M type map, the block quantizer from the P-E6 port, GGUF writer with provenance keys); `pelias_base_0step.gguf` cached on disk | The CPU quantizer port passes P-E6; the `ingest` output equals the P-X0 reference tensor for tensor (P-X6) or every difference has a recorded reason; the 0-step benchmark of P-X7 is written | P-E6, P-X0, P-X6, P-X7 | L |
 | **T2** | Data pipeline | T1 | Tokenizer and chat template through libllama, packer, masks, audits A-LEN/TOK/TPL/MASK/DUP/SPECIAL/FAMILY, `audit-data` | Zero mismatches in P-D2, P-D5; audit report with counts only | P-D2, D4, D5, D6 | M |
-| **T3** | Quantized GEMM family (G) | T1 | G8 dequant, G9 `q8_1` quantizer, bf16 GEMM, int8 GEMM, grouped MoE GEMM with tile map, transposed-dequant dgrad, LoRA epilogue | Rung-1 tolerances (6.11) incl. sanitizers; efficiency recorded | P-Q2, Q8, Q11, K4, K5, K12 | XL |
+| **T3** | Quantized GEMM family (G) | T1 | G8 dequant, G9 `q8_1` quantizer, GQ Mode Q requantizer (CPU port as oracle; 4.10), bf16 GEMM, int8 GEMM, grouped MoE GEMM with tile map, transposed-dequant dgrad, LoRA epilogue | Rung-1 tolerances (6.11) incl. sanitizers; efficiency recorded | P-Q2, Q8, Q11, K4, K5, K12 | XL |
 | **T4** | Elementwise, router, loss | T1 | RMSNorm, SwiGLU, gated norm, L2 norm, router + counting sort + combine, chunked CE | Rung 1; router identical to fp64 on all test shapes | P-K6, K11, Q9, Q12 | M |
 | **T5** | Attention (A) | T1 | IMRoPE, fused forward/backward at head-dim 256, blocked fallback | Rung 1; rotation matches llama.cpp (P-S4) | P-K7, Q7 | L |
 | **T6** | DeltaNet (D) | T1 | Gates, conv1d, chunk prep, state sweep, chunked forward and backward, fp64 and fp32 sequential oracles | Rung 1; forward matches llama.cpp's fused op (P-S7); backward ≤ 1e-3 vs fp64 | P-K8, K9, K10 | XL |
 | **T7** | One layer, then a tiny model | T3–T6 | Layer forward/backward for each layer type; tiny-config model with every op | Rung 2 (per-layer parity vs llama.cpp dumps); P-T1 finite-difference gradient check passes | P-M2, P-T1 | L |
 | **T8** | Full forward vs served truth | T7 | 40 layers + MTP block + lm_head with simple (unoptimized) expert streaming; modes R and F | Rung 3: truncated KL ≤ 1.0 × σ_float on 64 held-out documents, per-layer profile flat | P-Q5, P-Q6 | L |
-| **T9** | Backward, LoRA, optimizer | T8 | Backward sweep with the routing tape, LoRA, AdamW, step-wide normalization, deterministic reductions | Rung 4 (oracle C) and invariants: packed = unpacked, K = 1 = K = 4 | P-T2, T5, D3, K13 | L |
+| **T9** | Backward, LoRA, optimizer | T8 | Backward sweep with the routing tape, LoRA, AdamW, step-wide normalization, deterministic reductions, the Mode Q step (`W_eff` rebuilt once per optimizer step, straight-through gradient) | Rung 4 (oracle C) and invariants: packed = unpacked, K = 1 = K = 4 | P-T2, T5, D3, K13 | L |
 | **T10** | Streamer and layer-major scheduler | T9 | Three streams, expert slots, boundary store, window planner, governor under load | Zero allocations in the step loop; 79 fetches / 35.8 GiB per step; stall ≤ 5 % at ≥ 16 k tokens | P-M5, P-T7 | L |
 | **T11** | Training loop, eval, checkpoints | T10 | `train`, `eval`, four registries, resume, metrics; the **v0.2-parity run** | Rung 6: overfit passes in both modes, curve parity, bitwise resume | P-T3, T4, T9, T11 | M |
-| **T12** | Export, verify, engine hand-off | T11 | Adapter GGUF; merged GGUF byte-splice with the byte-budget solver and exact quantizers; hot-set writer and layout manifest (16.5); `verify` | Rungs 7–8: hash proof, KL gates, engine smoke, regression and VRAM gates | P-X1–X5, P-E9, E13, E14 | L |
+| **T12** | Export, verify, engine hand-off | T11 | Adapter GGUF; merged GGUF byte-splice (Mode Q: copy of the last `W_eff`, Δ_max = 0; the byte-budget solver and exact quantizers only for the override); hot-set writer and layout manifest (16.5); `verify` | Rungs 7–8: hash proof, KL gates, engine smoke, regression and VRAM gates | P-X1–X5, P-E9, E13, E14 | L |
 | **T13** | Performance engineering | T11 | Adopt the int8 forward (if P-K2 and P-Q6 allow), fusions, CUDA graphs, tile tuning, pad compaction | Targets of 1.4 met, or the gap is explained by measurement; rungs 1–7 still pass | P-T12, T13 | L |
-| **T14** | Optional modes and ablations | T12 | MTP co-training, Mode L (and L-Z), Mode Q, Mode B/N, ablations T-A1…A11 | Each mode's own pre-declared gates; losers closed with the result written down | P-T6, T8, E8, L3–L8, L10 | XL |
+| **T14** | Optional modes and ablations | T12 | MTP co-training, Mode L (and L-Z), Mode B/N, ablations T-A1…A11 (T-A11 checks the Mode Q default) | Each mode's own pre-declared gates; losers closed with the result written down | P-T6, T8, E8, L3–L8, L10 | XL |
 
 ### 12.2 Stage detail — build, test, rollback
 
 * **T0.** *Build:* probe programs (standalone), `probes/` runner, machine-state recorder, the tree of 5.2 with empty modules and CMake targets, `tests/ref/` skeleton. *Test:* each probe's own pass/fail. *Rollback:* none needed (no product code); if a probe fails its design switch, the switch flips and the affected stage's plan is edited before it starts.
 * **T1.** *Build:* `hal/arena` (bump arenas per lifetime: weights, step, window, scratch), `hal/governor` (sums arena capacities against 10.7 GiB; `cudaMemGetInfo` cross-check), `io/gguf` (header parse, mmap, tensor map by name — Appendix A), `plan/solver` (window sizes, slots, fetch schedule). *Test:* a synthetic plan exceeding the ceiling aborts; the served GGUF round-trips its tensor table. *Rollback:* tag `t1`; nothing depends on it yet.
+* **T1b.** *Build:* `config` (the defaults of 9.4: Mode Q, Δ_max = 0, planner automatic, overrides off) and `ingest` (reads the bf16 safetensors header and shards through mmap, one tensor at a time; applies the llama.cpp conversions; picks each tensor's type by the stock Q4_K_M rule; quantizes with the P-E6 port; writes `pelias_base_0step.gguf` with the source shards' SHA-256 and the new file's SHA-256 as provenance). *Test:* P-X6 against the P-X0 reference; P-X7 for the benchmark. *Rollback:* report the differences; Stage B does not start from a 0-step file that failed P-X6 without the author's word. T1b is inserted after T1 so that the numbering of T2–T14 cited elsewhere stays. *Unmeasured:* the bf16 read time, the quantization time (CPU port or GPU), the host RAM peak (the design is one tensor at a time; the real peak is measured), The safetensors layout is MEASURED (4.2): fused expert tensors, 1,045 tensors, 71.90 GB, read from the headers of the author's archived copy on 2026-10-24. The shards were not in the first folders linked to the session; the author found them in an archive folder later that morning. No shard byte has been read or hashed yet.
 * **T2.** *Build:* `tok` (libllama tokenizer, template renderer), `data` (JSONL reader, `reasoning_content` handling, packer with 64-slot alignment, span masks, audits). *Test:* P-D2/D5 plus the synthetic public-domain fixtures. *Rollback:* a failed audit stops the pipeline by design; code is independent of the GPU stages.
 * **T3–T6.** Each family is built to its section of Chapter 6 with its CPU/fp64 reference first, then the kernel, then the efficiency probes. *Parallel:* T3, T4, T5, T6 share only `hal`. *Rollback:* per-family tags; a family that misses its efficiency bar falls back to the simpler variant named in its section (dequant-to-scratch + bf16 GEMM for G; blocked attention for A; unfused chunk path for D).
 * **T7.** *Build:* `model/layer_{deltanet,attention}` and `model/moe`, the tiny-config builder (random weights at real head dimensions, 2–4 layers). *Test:* finite differences in fp64 (P-T1); per-layer outputs vs llama.cpp dumps on three fixed sequences (rung 2). *Rollback:* tag `t7`; a failing block is bisected against oracle B.
@@ -1694,7 +1748,7 @@ The order follows one rule: **build the most uncertain thing first, in the cheap
 * **T11.** *Build:* `train` loop, `eval`, registries (weights, optimizer, data cursor/RNG, MTP), metrics (step-wide), resume. *Test:* P-T3/T4/T9/T11; the parity run reproduces v0.2's recipe on the author's data (private; counts and curves only). *Rollback:* none; this is the first complete trainer and is tagged `v1.0-alpha`.
 * **T12.** *Build:* `export` (adapter writer, merged writer, quantizers, solver, hot-set writer, manifest), `verify` (separate process, libllama). *Test:* P-X1…X5, P-E9/E13/E14. *Rollback:* the adapter GGUF alone is a valid fallback release.
 * **T13.** *Build:* tuned tiles and fusions from the Wave 0 and stage probes; CUDA graphs if P-H9 allowed; compaction if P-T13 pays. *Test:* every rung-1 test again, plus bitwise determinism between fused and unfused in deterministic mode. *Rollback:* every optimization sits behind a flag and is admitted only if it matches the slower path (6.5).
-* **T14.** *Build and test:* in the order MTP (needs P-S5) → Mode Q (needs P-E6) → Mode L (needs P-L1/L2/E3) → Mode B/N (needs P-E12), each as a separate branch with its own gates (7.6, 4.10, 7.12, 16.5). *Rollback:* a mode that fails its gate is closed; the code path is deleted or left disabled, and the null result goes into the ledger.
+* **T14.** *Build and test:* in the order MTP (needs P-S5) → Mode L (needs P-L1/L2/E3) → Mode B/N (needs P-E12); Mode Q is no longer in this stage (it is the default and is built in T3, T9 and T12; only its check, T-A11, stays here), each as a separate branch with its own gates (7.6, 4.10, 7.12, 16.5). *Rollback:* a mode that fails its gate is closed; the code path is deleted or left disabled, and the null result goes into the ledger.
 
 ### 12.3 Critical path and what can run in parallel
 
@@ -1865,6 +1919,11 @@ Every item here is **not relied on** until its probe passes.
 | ε in 0.4–0.6; ε₈ = ε − 0.1 | 1.4, 13 | P-K1, K2 | Re-base targets |
 | int8 tensor cores 4× bf16 on this card | 1.2, 4.5 | P-H3 | **Passed 2026-10-24:** int8 259.5 vs bf16 65.2 = 3.98×, sustained, both platforms |
 | FP8 behaviour | 4 | P-Q10 | Stays unplanned |
+| Mode Q trains without stalling (STE) and exports with zero merge drift | 4.10 | P-E6, P-E7, T-A11, P-X2 | The ladder of 4.8: CPU quantizer port for the class, then the override (D32), then the adapter-only release |
+| The Mode Q `W_eff` copy is 0.8–1.1 GiB and the headroom stays ≥ 1.7 GiB | 4.10, 5.3 | P-M2 | Re-plan the slots or the window (the fallbacks of 5.3) |
+| The author's hypothesis: the finished Q4_K_M lies very close to the full bf16 model | 1.5, 4.9 | P-X7 | Reported as measured; no claim before the result |
+| Stage A reproduces llama.cpp's conversion and quantization byte for byte, at an acceptable run time and host RAM | 4.2, 12.2 (T1b) | P-X6; times unmeasured | Fix the bug by tensor class; Stage B waits for the author |
+| The safetensors layout (per-expert or fused expert tensors, names, shard sizes) and the size | 12.2 (T1b) | **Read 2026-10-24 (MEASURED):** fused experts, 1,045 tensors, 71.90 GB (4.2). Still open: which converter class drops the vision tower, and the reference file's tensor count (P-X0, P-X6) | `ingest` can now be specified from the measured names and shapes; its byte-level checks wait for P-X6 |
 | Proposals' 3.2–4× speed-up | 2.9 | none (dropped) | — |
 | Reviewer claim A2 ("catastrophic bf16 summation") | 2.6 | P-Q8 | Already judged overstated |
 | Served attention uses f16 internally | 2.5 | P-Q7 | Choose our internals by measurement |
@@ -1895,7 +1954,7 @@ Every item here is **not relied on** until its probe passes.
 | Decision | Trigger | Action |
 |---|---|---|
 | Mode R vs F | P-K2 ≥ 1.3× and P-Q6 KL(F) ≤ KL(R) | F default, else R |
-| Core types | P-Q3 inside Δ_max (P-E4) | Solver output; else Mode Q; else E-A |
+| Core types | default (D31) | Mode Q at the served types; override (D32): P-Q3 inside Δ_max (P-E4) → solver output |
 | Router locality | P-L1 gap > 0.03 and P-L2 shows a cost curve worth beating | Build Mode L; else closed before any code |
 | Zero-spill layers | P-E2 shows a cost difference **and** P-E3 shows feasible margins | Layer weights; else uniform |
 | Mode B / N | P-E12 criteria met | Build; else closed |
@@ -2286,8 +2345,8 @@ Results (DERIVED, 2026-10-23): baseline hit 0.8273, any-miss 0.639, miss histogr
 **Decisions for the author (the trainer is written so that none of them blocks Wave 0).**
 
 1. Is the 7.5 GiB bank a ruling, or the current best step under the ceiling (10.7 for the trainer)? (This document treats it as derived.)
-2. Which prefill micro-batch does the engine ship with? It moves Δ_max between 0.16 GiB and none on the whole-card reading (it was 0.36 and ≈ 0.11 GiB at 10.9), and so decides which core classes can be raised above their served type.
-3. Does the engine add `Q8_0` weights? (Only then is Q8_0 an output type.)
+2. **RULED 2026-10-24 07:39 (D31, D34).** Which prefill micro-batch does the engine ship with? It is an engine setting, and the trainer no longer depends on the answer: the default export adds +0 extra bytes (Mode Q), Δ_max is 0 by default, and the trainer's own micro-batch and context come from the planner and the start-up probe, with manual values only in Advanced/Developer. The engine's choice still moves its own peak (0.16 GiB free at the default, none at `-ub 2048`, whole-card reading) and decides which classes the optional override could raise.
+3. **RULED 2026-10-24 07:39 (D32).** Does the engine add `Q8_0` weights? Not needed: no Q8_0 (+607.4 MiB) or Q6_K (+282.0 MiB) core by default. Q8_0 or Q6_K cores remain an optional Advanced/Developer override (for example a GPU of 16 GB or more, or smaller expert banks), and then need the engine's support (P-E5).
 4. Is Windows-native promoted from "not in scope" to a supported target? The recorded runs (two Windows launches, one WSL launch) show +25–28 % decode; three launches per side are needed before it is a claim.
 5. Is Mode L / L-Z worth building, once P-L1, P-L2, P-E2 and P-E3 (all Wave 0, no trainer code) have reported?
 6. If the author has a Windows-native run newer than those in the repository (the outside report quoted 57.0 tok/s), it should be added to the ledger with its raw file; until then the recorded numbers are the ones used.
@@ -2388,22 +2447,22 @@ Status: **kept** · **revised** (changed by this audit) · **new** (added by thi
 
 | ID | Decision | Where | Status |
 |---|---|---|---|
-| D1 | GGUF in, GGUF out: train against the bytes the engine serves | 1.2, 2 | kept |
+| D1 | GGUF in, GGUF out: train against the bytes the engine serves; the served file is written by Stage A from the original bf16 safetensors (D33) | 1.2, 2 | kept (amended) |
 | D2 | The routed experts are frozen and byte-spliced into the output (the router is the one gated exception, D21) | 1.2, 9.3 | kept (amended) |
 | D3 | The trained part is a LoRA on the 310 core modules, rank 16, fp32 masters | 7.2 | kept |
-| D4 | The core is exported as an isolated higher-precision block; **types come from the byte-budget solver, not a fixed Q8_0** | 4.3–4.4, 9.4 | **revised** |
+| D4 | The core keeps its served types and is trained through the exact quantizer (Mode Q, the default: D31); an isolated higher-precision block with types from the byte-budget solver is an optional override (D22, D32) | 4.3–4.4, 9.4 | **revised twice** |
 | D5 | Layer-major scheduling with K micro-batches per layer sweep | 5.6 | kept |
 | D6 | Two forward numerics (bf16 reference, serve-faithful int8) chosen by measurement | 4.5 | kept |
 | D7 | Routing tape recorded in the forward and reused in the backward; router frozen by default | 6.3, 7.4 | kept (amended by D21) |
 | D8 | Fused chunked cross-entropy, step-wide token normalization | 7.3 | kept |
-| D9 | The base is taken as given (stock `llama-quantize`, no imatrix) | 3.2 | kept |
+| D9 | The base is the plain block quantization of the original bf16 weights with the stock Q4_K_M type map and no imatrix, written once by Stage A (D33); no third-party GGUF and no earlier trainer output is used | 3.2, 12.2 (T1b) | **revised** |
 | D10 | Packing into windows ≤ 8,192 slots; longer documents are a hard failure | 8.5 | kept |
 | D12 | MTP co-training conditional on P-S5 | 7.6 | kept |
 | D13 | Three streams (compute, weight loads, boundary traffic) | 5.4 | kept |
 | D14 | Coding basis: C++20 / CUDA 13.0.88, `sm_89`, CMake + Ninja, no Python in the product | 5.1 | kept |
 | D21 | Mode L — locality-aware router training; optional, gated, off by default. **Amended** by 16.5 B1: zero-miss hinge (L-Z), clamped-forward absorb (L-C), distillation anchor, gates G-Z1…G-Z4 | 7.12, 16.5 | new (amended) |
-| D22 | Format closure and byte-budget solver; Δ_max = 0.16 GiB (default micro-batch) or none (`-ub 2048`) at the 10.7 GiB ceiling, whole-card basis (it was 0.36 / ≈ 0.11 at 10.9) | 9.4, 16.3.1 | new (numbers revised) |
-| D23 | Mode Q — merge-aware training through the exact ggml quantizer (straight-through) | 4.10 | new |
+| D22 | Format closure and byte-budget solver; Δ_max = 0.16 GiB (default micro-batch) or none (`-ub 2048`) at the 10.7 GiB ceiling, whole-card basis (it was 0.36 / ≈ 0.11 at 10.9). **An optional Advanced/Developer override since 2026-10-24 (D32); the default Δ_max is 0** | 9.4, 16.3.1 | new (numbers revised; reclassified) |
+| D23 | Mode Q — merge-aware training through the exact ggml quantizer (straight-through) | 4.10 | new (the default since 2026-10-24, D31) |
 | D24 | Mode B / N — bimodal-faithful forward and outlier regularizer; adopted only if P-E12 passes | 16.5 B5 | new |
 | D25 | Engine contract: hot-set writer (parity P-E14), layout manifest, optional expert-last layout, optional call into the engine's repacker; the engine owns the packed layout | 16.5 B4, 16.7 | new |
 | D26 | VRAM ceiling 10.7 GiB (author ruling 2026-10-23, from 10.9), judged at start on the smaller of CUDA free and NVML free after the context; its basis (whole card vs process) is open (16.7 decision 7) | 0.3, 15.1, 16.3 X15, X16 | new |
@@ -2411,6 +2470,12 @@ Status: **kept** · **revised** (changed by this audit) · **new** (added by thi
 | D28 | The VRAM ceiling is measured at start from the probes (smaller of CUDA free and NVML free after the context, minus a margin), the process-only reading; 10.7 GiB stays this machine's value until the margin is measured by the disturbance test | 3.3 (U2), 11.12, 15.1, 16.3.1, 16.7 (decision 7) | author ruling 2026-10-24 |
 | D29 | Universal use: a start-up self-probe and machine profile (U1), a plan card with a real choice (U3), a model key from the file's SHA-256 with per-model facts stored under it (U4), a scan of what holds GPU memory with proposals of what to close (U6); built after the top-tier gate | 3.3 | author's points 2026-10-24 |
 | D30 | Universal use, intake and safeguards: parameter, persona and client sheets with examples and an import step (U7, U8); cautions for fit, loops and a model that does not work, with a client matrix (U9); propose → confirm → apply → re-test → final summary before Start (U10); an Expert mode with forced values and repeated warnings (U11); built after the top-tier gate | 3.3 | author's points 2026-10-24 |
+| D31 | The default export path is Mode Q at the served types (E-F) with the adapter written for information (E-A); Δ_max = 0 by default, so exports never depend on spare engine VRAM. Still gated by P-E6 and checked by T-A11 | 4.4, 4.10, 9.3, 9.4 | author ruling 2026-10-24 |
+| D32 | The byte-budget solver and type raises (Q6_K / Q8_0, D22) are an optional Advanced/Developer override (the Expert mode of U11), off by default; no Q8_0 (+607.4 MiB) or Q6_K (+282.0 MiB) inflation unless the user turns it on | 4.3, 4.4, 9.4 | author ruling 2026-10-24 |
+| D33 | Input is the original bf16 safetensors (71.90 GB, MEASURED from the shard headers), supplied by the user. Stage A writes `pelias_base_0step.gguf` (own conversion, ggml-exact block quantizer, stock Q4_K_M type map, cached); Stage B trains on it. The 0-step file is benchmarked against the stock Q4_K_M and bf16 (P-X7). The earlier trainer's GGUF and any third-party quantization are not the base; the trainer never downloads | 3.2, 4.2, 12.2 | author ruling 2026-10-24 |
+| D34 | The trainer's micro-batch (window, K) and context are chosen by the planner from the quick start-up probe inside 10.7 GiB, decoupled from the engine's `-ub`; manual values only in Advanced/Developer | 3.3 (U1, U3, U11), 5.3 | author ruling 2026-10-24 |
+| D35 | The kernel probes P-K1, P-K2, P-K3, P-Q10 run as one batch (Batch C) on WSL2 and Windows-native; the runner enforces the 10.7 GiB cap, logs clocks, temperature and free VRAM, and cools down between sub-tests | 11.3 | author ruling 2026-10-24 |
+| D36 | Oracles: the earlier trainer's outputs are not used for parity. Forward parity is llama.cpp `2ca15f540` eval-callback on the clean baseline GGUF (the P-X0 reference); backward parity is fp64 and PyTorch on a 4-layer slice; built at the verification stage | 10.6 | author ruling 2026-10-24 |
 
 ## Appendix E — Arithmetic ledger
 

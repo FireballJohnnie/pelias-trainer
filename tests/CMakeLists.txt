@@ -3,10 +3,16 @@
 add_executable(framework_smoke smoke/framework_smoke.cc)
 target_include_directories(framework_smoke PRIVATE ${PELIAS_INCLUDE_DIR} ${PELIAS_GENERATED_DIR} ${PELIAS_SRC_DIR})
 target_compile_features(framework_smoke PRIVATE cxx_std_20)
-foreach(mod IN ITEMS hal tok io plan data model stream kern sched train export verify project startup intake help warn flow serve ui)
+foreach(mod IN ITEMS hal config tok io ingest plan data model stream kern sched train export verify project startup intake help warn flow serve ui)
     target_link_libraries(framework_smoke PRIVATE pelias_${mod})
 endforeach()
 add_test(NAME framework_smoke COMMAND framework_smoke)
+
+add_executable(defaults_tests unit/defaults_tests.cc)
+target_include_directories(defaults_tests PRIVATE ${PELIAS_INCLUDE_DIR} ${PELIAS_GENERATED_DIR} ${PELIAS_SRC_DIR})
+target_compile_features(defaults_tests PRIVATE cxx_std_20)
+target_link_libraries(defaults_tests PRIVATE pelias_config pelias_export pelias_ingest)
+add_test(NAME defaults COMMAND defaults_tests)
 
 find_package(Python3 COMPONENTS Interpreter)
 if(Python3_FOUND)

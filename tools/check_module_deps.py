@@ -12,12 +12,17 @@ from pathlib import Path
 
 ALLOWED = {
     "hal": [],
+    "config": [],
     "tok": [],
     "io": [
         "hal"
     ],
     "plan": [
         "hal"
+    ],
+    "ingest": [
+        "io",
+        "config"
     ],
     "data": [
         "io",
@@ -44,7 +49,8 @@ ALLOWED = {
     ],
     "export": [
         "io",
-        "model"
+        "model",
+        "config"
     ],
     "verify": [
         "hal",

@@ -12,6 +12,8 @@
 #include "hal/arena.h"
 #include "hal/pinned_pool.h"
 #include "hal/vram_governor.h"
+#include "config/trainer_config.h"
+#include "ingest/ingest_plan.h"
 #include "hal/sync_audit.h"
 #include "tok/tokenizer.h"
 #include "tok/chat_template.h"

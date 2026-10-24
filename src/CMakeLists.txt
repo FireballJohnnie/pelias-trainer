@@ -3,8 +3,10 @@
 #
 # One static library per module (pelias_<module>), then the command-line program.
 add_subdirectory(hal)
+add_subdirectory(config)
 add_subdirectory(tok)
 add_subdirectory(io)
+add_subdirectory(ingest)
 add_subdirectory(plan)
 add_subdirectory(data)
 add_subdirectory(model)
