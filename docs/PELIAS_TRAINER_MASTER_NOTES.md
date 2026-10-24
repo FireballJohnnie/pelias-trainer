@@ -5,7 +5,7 @@
 
 | | |
 |---|---|
-| Date | 2026-10-23; hardware results and the 10.7 GiB ceiling folded in 2026-10-24 |
+| Date | 2026-10-23; hardware results and the 10.7 GiB ceiling folded in 2026-10-24; universal-use design points and the ruling on decision 7 recorded the same day |
 | Status | **Design, plus the Wave 0 hardware measurements. No trainer code exists.** The hardware probes were run on the GPU on 2026-10-23/24 (WSL2 and Windows-native); section 1.18 records what they found and master 11.12 holds the table. The other numbers come from reading files, reading source, running the engine project's logged results through arithmetic, and one analysis of the engine's routing trace (P-E1). |
 | Draft | Written quickly from the master. Section 3 (what is needed) is the part to act on. |
 | Copyright | Copyright (c) 2026 John Lipka and the Pelias contributors |
@@ -112,6 +112,12 @@ Each entry: **finding** · **how it was derived** · **label** · **what depends
 * **Derived by.** One standalone program (`pelias_probe`) run in full on each platform; each probe writes one JSON; the numbers above are read from those files, not from memory. The raw files are in the author's backup folder, not in the repository.
 * **Label.** MEASURED, except the "fixed driver budget" and "most likely the engine's gate" (inference). **Not yet measured, with pathways:** P-M4 (needs the model path), the stock-clock repeat, the Windows jitter number (the probe asks Windows for no finer timer, so its 6 ms is probably the 15.6 ms default tick), pinned memory above 32 GiB, the memory-clock difference, ReBAR on/off, heavier kernels for the display test, the Balanced power plan, the engine's own overlap. **Master:** 11.12, 5.4, 15.1, 16.3 X15–X16, D26, D27.
 
+### 1.19 Universal use: the author's design points (2026-10-24; not built)
+* **Finding.** The author wants the trainer to adapt to the machine and to the MoE the user chooses. Five points were recorded (master 3.3): (U1) a quick probe at every start writes a machine profile, with the slow probes run once per machine and cached; (U2) the ceiling comes from the probe results, not a typed constant (this is the ruling on decision 7); (U3) a plan card after the probes gives the user a real choice between two to four feasible plans, each with measured fit, labelled speed, quality risk and export effect; (U4) a different model is identified by its file's SHA-256 plus the shapes in its metadata, and the per-model facts are stored under that key; (U5) if a probe fails from a memory spike, a rerun with a flush shows whether flushing helps, and if it does training flushes too.
+* **What exists today.** The base file's SHA-256 is recorded as provenance only (checkpoints, export report, layout manifest, engine pack). The run scripts gained a GPU-memory log, a `SETTLE` wait and a `RETRY_ON_FAIL` rerun (master 11.1 rule 8). No real failure has occurred, so the retry has not been used.
+* **Derived by.** Reading the author's statements against the master. Nothing here is a measurement.
+* **Label.** DECISION (D28, D29). The hash time is UNVERIFIED: it depends on the read rate (P-M4) and the CPU's SHA-256 speed, both unmeasured. The drift of other programs' GPU memory during a run is unmeasured too; the way to measure it (the disturbance test) is in master 11.12. **Master:** 3.3, 11.1, 11.12, 15.1, 16.3.1, 16.7 decision 7, D28, D29.
+
 ---
 
 ## 2. How the pieces depend on each other
@@ -161,6 +167,7 @@ KL floor of the served file (1.13) ──► K1/K2/K3 gates ──► whether th
 | Engine fit | 16 | P-E4, P-E5, P-E9–P-E14 |
 | Risks and kill criteria | 14 | per risk |
 | Measured hardware facts | 11.12, 2.1 | the hardware set has run except P-M4; leftovers listed in 11.12 |
+| Universal use (start-up probe, plan card, model key) | 3.3, D28, D29 | none yet; the parts are P-H3, P-H5, P-H8, P-H12, P-M3, P-M4 |
 | All arithmetic | Appendix E | none (scripted) |
 
 ---
@@ -177,7 +184,7 @@ KL floor of the served file (1.13) ──► K1/K2/K3 gates ──► whether th
 | 4 | Promote Windows-native from "not in scope"? | It is 5.1–5.2 ms per token faster at decode (1.15) | Which platform the trainer's exports are tuned for |
 | 5 | Is Mode L / L-Z worth building after the Wave 0 probes? | Benefit is unverified and the evidence is mixed (1.9, 1.10) | Whether any router training is built |
 | 6 | Is there a Windows run newer than the repo's? | The gap table uses the recorded runs only | 1.15 |
-| 7 | What is the 10.7 GiB ceiling a ceiling of: the whole card (Windows' share included, as the engine's peaks and its 11.2 gate are measured) or the process's own allocations (as P-H8 and the plan sum read it)? | Whole card: 0.16 GiB / none for the core. Process only: about 1.2 / 0.9 GiB and the 8-bit core would fit (1.18, master 16.3.1) | Core types, export size, and whether the engine's bank is re-examined |
+| 7 | What is the 10.7 GiB ceiling a ceiling of? **Ruled 2026-10-24 by the author: it comes from the probe results at start** (process-only reading; the follow-on that keeps 10.7 for this machine until the margin is measured and keeps the whole-card figures as the stricter planning figures is a proposal, not yet agreed) | Whole card: 0.16 GiB / none for the core. Process only: about 1.2 / 0.9 GiB and the 8-bit core would fit (1.18, master 16.3.1) | Core types, export size, and whether the engine's bank is re-examined |
 
 ### 3.2 Measurements needed (each has a probe in master Chapter 11; Wave 0 needs no trainer code)
 
@@ -218,12 +225,12 @@ KL floor of the served file (1.13) ──► K1/K2/K3 gates ──► whether th
 * **Engine side:** the cross-check against the speed ceiling, the engine master notes, the engine plain-English README, and the engine repository update.
 
 ### 3.5 Weak points in this design (so they are not missed)
-* **The ceiling has no single meaning yet** (decision 7): the core's room is 0.16 GiB / none or about 1.2 / 0.9 GiB depending on the reading.
+* **The margin under the measured ceiling is unmeasured** (decision 7 is ruled; the disturbance test in master 11.12 sets the margin). Until then the core's room is 0.16 GiB / none on the whole-card figures or about 1.2 / 0.9 GiB on the process-only figures.
 * **Efficiency is unmeasured.** Every tokens-per-second figure for the new trainer is conditional on it (1.8).
 * **The size of the merge loss on the core is unmeasured** (1.4); the whole precision plan has an escalation ladder (master 4.8) for the case it is worse than expected.
 * **The hot-set and locality ideas are hypotheses** (1.9–1.11). Nothing here depends on them to produce a working trainer.
 * **The author's guess that 70–80 % of the earlier draft was compliant is not confirmed.** The compliance matrix has 22 rows: 7 already met, 4 needing correction, 6 new specification, 3 resting on premises the engine's data does not support, 2 waiting on probes. There is no natural denominator for a percentage.
-* **Label counts in the master** (occurrences, 2026-10-24): MEASURED 35 · READ-SRC 42 · PUBLISHED 33 · DERIVED 81 · ESTIMATE 23 · UNVERIFIED 19 · DECISION 19. Each ESTIMATE and UNVERIFIED claim is paired with a probe.
+* **Label counts in the master** (occurrences, 2026-10-24): MEASURED 35 · READ-SRC 42 · PUBLISHED 33 · DERIVED 82 · ESTIMATE 23 · UNVERIFIED 20 · DECISION 23. Each ESTIMATE and UNVERIFIED claim is paired with a probe.
 
 ### 3.6 How to keep this file true
 When a probe returns, change its entry's label from ESTIMATE or UNVERIFIED to MEASURED, record the date and the raw file, and update the rows of 2.2 that depend on it. Never replace a derived number with a guess. If a result contradicts the master, correct the master first, then this file.
