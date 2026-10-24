@@ -5,7 +5,7 @@
 
 | | |
 |---|---|
-| Date | 2026-10-23; hardware results and the 10.7 GiB ceiling folded in 2026-10-24; universal-use design points and the ruling on decision 7 recorded the same day |
+| Date | 2026-10-23; hardware results and the 10.7 GiB ceiling folded in 2026-10-24; universal-use design points and the ruling on decision 7 recorded the same day; the intake, client-style, warning, confirm-loop and Expert-mode points (master U7–U11) added later that day |
 | Status | **Design, plus the Wave 0 hardware measurements. No trainer code exists.** The hardware probes were run on the GPU on 2026-10-23/24 (WSL2 and Windows-native); section 1.18 records what they found and master 11.12 holds the table. The other numbers come from reading files, reading source, running the engine project's logged results through arithmetic, and one analysis of the engine's routing trace (P-E1). |
 | Draft | Written quickly from the master. Section 3 (what is needed) is the part to act on. |
 | Copyright | Copyright (c) 2026 John Lipka and the Pelias contributors |
@@ -113,10 +113,10 @@ Each entry: **finding** · **how it was derived** · **label** · **what depends
 * **Label.** MEASURED, except the "fixed driver budget" and "most likely the engine's gate" (inference). **Not yet measured, with pathways:** P-M4 (needs the model path), the stock-clock repeat, the Windows jitter number (the probe asks Windows for no finer timer, so its 6 ms is probably the 15.6 ms default tick), pinned memory above 32 GiB, the memory-clock difference, ReBAR on/off, heavier kernels for the display test, the Balanced power plan, the engine's own overlap. **Master:** 11.12, 5.4, 15.1, 16.3 X15–X16, D26, D27.
 
 ### 1.19 Universal use: the author's design points (2026-10-24; not built)
-* **Finding.** The author wants the trainer to adapt to the machine and to the MoE the user chooses. Six points were recorded (master 3.3): (U1) a quick probe at every start writes a machine profile, with the slow probes run once per machine and cached; (U2) the ceiling comes from the probe results, not a typed constant (this is the ruling on decision 7); (U3) a plan card after the probes gives the user a real choice between two to four feasible plans, each with measured fit, labelled speed, quality risk and export effect; (U4) a different model is identified by its file's SHA-256 plus the shapes in its metadata, and the per-model facts are stored under that key; (U5) if a probe fails from a memory spike, a rerun with a flush shows whether flushing helps, and if it does training flushes too; (U6) before the plan card the system scans what holds GPU memory and proposes which apps to close (close all, choose which, or none), then re-measures and recomputes the ceiling.
+* **Finding.** The author wants the trainer to adapt to the machine and to the MoE the user chooses. Eleven points were recorded (master 3.3): (U1) a quick probe at every start writes a machine profile, with the slow probes run once per machine and cached; (U2) the ceiling comes from the probe results, not a typed constant (this is the ruling on decision 7); (U3) a plan card after the probes gives the user a real choice between two to four feasible plans, each with measured fit, labelled speed, quality risk and export effect; (U4) a different model is identified by its file's SHA-256 plus the shapes in its metadata, and the per-model facts are stored under that key; (U5) if a probe fails from a memory spike, a rerun with a flush shows whether flushing helps, and if it does training flushes too; (U6) before the plan card the system scans what holds GPU memory and proposes which apps to close (close all, choose which, or none), then re-measures and recomputes the ceiling; (U7) the user fills in what the model should learn in persona, parameter and client sheets (the same fields as the author's parameter list: id, name, tier, description), each with erasable examples, and may attach a premade list (a `create_parameters` `.py` read without running it, CSV/JSON, or `.md`/`.txt`) that fills the sheet as DRAFT rows; (U8) a clients sheet records how each front-end (Visual Studio/Copilot, Ollama/llama, odysseus-ai, a web UI) presents itself, so the identity and tool rows teach the model to hold up under all of them, with every entry labelled CAPTURED, PUBLISHED, APPROXIMATION or UNVERIFIED; (U9) cautions about over- and under-fitting, loop-prone content and a model that does not work although training succeeded, ending in a client matrix test; (U10) each problem is proposed, confirmed, fixed on a copy, re-tested and shown on a final summary before Start; (U11) an Expert mode lets the user force values, with USER-FORCED labels and the warnings repeated on the summary.
 * **What exists today.** The base file's SHA-256 is recorded as provenance only (checkpoints, export report, layout manifest, engine pack). The run scripts gained a GPU-memory log, a `SETTLE` wait and a `RETRY_ON_FAIL` rerun (master 11.1 rule 8). No real failure has occurred, so the retry has not been used.
 * **Derived by.** Reading the author's statements against the master. Nothing here is a measurement.
-* **Label.** DECISION (D28, D29). The hash time is UNVERIFIED: it depends on the read rate (P-M4) and the CPU's SHA-256 speed, both unmeasured. The drift of other programs' GPU memory during a run is unmeasured too; the way to measure it (the disturbance test) is in master 11.12. **Master:** 3.3, 11.1, 11.12, 15.1, 16.3.1, 16.7 decision 7, D28, D29.
+* **Label.** DECISION (D28, D29, D30). The hash time is UNVERIFIED: it depends on the read rate (P-M4) and the CPU's SHA-256 speed, both unmeasured. The drift of other programs' GPU memory during a run is unmeasured too; the way to measure it (the disturbance test) is in master 11.12. **Master:** 3.3, 11.1, 11.12, 15.1, 16.3.1, 16.7 decisions 7–9, D28, D29, D30.
 
 ---
 
@@ -167,7 +167,7 @@ KL floor of the served file (1.13) ──► K1/K2/K3 gates ──► whether th
 | Engine fit | 16 | P-E4, P-E5, P-E9–P-E14 |
 | Risks and kill criteria | 14 | per risk |
 | Measured hardware facts | 11.12, 2.1 | the hardware set has run except P-M4; leftovers listed in 11.12 |
-| Universal use (start-up probe, plan card, model key) | 3.3, D28, D29 | none yet; the parts are P-H3, P-H5, P-H8, P-H12, P-M3, P-M4 |
+| Universal use (start-up probe, plan card, model key, parameter intake, client styles, warnings, confirm loop, Expert mode) | 3.3, D28, D29, D30 | none yet; the parts are P-H3, P-H5, P-H8, P-H12, P-M3, P-M4 |
 | All arithmetic | Appendix E | none (scripted) |
 
 ---
@@ -185,6 +185,8 @@ KL floor of the served file (1.13) ──► K1/K2/K3 gates ──► whether th
 | 5 | Is Mode L / L-Z worth building after the Wave 0 probes? | Benefit is unverified and the evidence is mixed (1.9, 1.10) | Whether any router training is built |
 | 6 | Is there a Windows run newer than the repo's? | The gap table uses the recorded runs only | 1.15 |
 | 7 | What is the 10.7 GiB ceiling a ceiling of? **Ruled 2026-10-24 by the author: it comes from the probe results at start** (process-only reading; the follow-on that keeps 10.7 for this machine until the margin is measured and keeps the whole-card figures as the stricter planning figures is a proposal, not yet agreed) | Whole card: 0.16 GiB / none for the core. Process only: about 1.2 / 0.9 GiB and the 8-bit core would fit (1.18, master 16.3.1) | Core types, export size, and whether the engine's bank is re-examined |
+| 8 | What does a blank answer in the parameter sheet do? | The author's list makes code answers from hand-written templates; a description alone makes only knowledge rows | Knowledge-only rows (flagged), or a base-model draft the user reviews before it trains |
+| 9 | May Expert mode switch off the clean-stop guard, or only change its limits? | The guard writes an emergency checkpoint when VRAM, RAM or swap go wrong | Whether a forced run can lose work. Proposed: limits only |
 
 ### 3.2 Measurements needed (each has a probe in master Chapter 11; Wave 0 needs no trainer code)
 
@@ -230,7 +232,7 @@ KL floor of the served file (1.13) ──► K1/K2/K3 gates ──► whether th
 * **The size of the merge loss on the core is unmeasured** (1.4); the whole precision plan has an escalation ladder (master 4.8) for the case it is worse than expected.
 * **The hot-set and locality ideas are hypotheses** (1.9–1.11). Nothing here depends on them to produce a working trainer.
 * **The author's guess that 70–80 % of the earlier draft was compliant is not confirmed.** The compliance matrix has 22 rows: 7 already met, 4 needing correction, 6 new specification, 3 resting on premises the engine's data does not support, 2 waiting on probes. There is no natural denominator for a percentage.
-* **Label counts in the master** (occurrences, 2026-10-24): MEASURED 36 · READ-SRC 42 · PUBLISHED 33 · DERIVED 83 · ESTIMATE 23 · UNVERIFIED 21 · DECISION 24. Each ESTIMATE and UNVERIFIED claim is paired with a probe.
+* **Label counts in the master** (occurrences, 2026-10-24): MEASURED 36 · READ-SRC 49 · PUBLISHED 34 · DERIVED 83 · ESTIMATE 23 · UNVERIFIED 26 · DECISION 29. Each ESTIMATE and UNVERIFIED claim is paired with a probe.
 
 ### 3.6 How to keep this file true
 When a probe returns, change its entry's label from ESTIMATE or UNVERIFIED to MEASURED, record the date and the raw file, and update the rows of 2.2 that depend on it. Never replace a derived number with a guess. If a result contradicts the master, correct the master first, then this file.
