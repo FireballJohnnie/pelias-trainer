@@ -16,6 +16,8 @@
 > This repository is private and holds a draft. This file describes what the code in the author's development folder does, as read from its own documentation and imports. **Numbers from logs are in [`benchmarks/RESULTS.md`](benchmarks/RESULTS.md)** (two training runs, the second continuing from the first, which together made the 4-bit and 5-bit GGUF files; plus the export record, the `Q5_K_M` export log and tests of those files); this file gives no training-speed, memory or accuracy number of its own. Sources, with their roles, are in [`CITATIONS.md`](CITATIONS.md).
 > Every number in this file carries one label: **measured** (counted or run on the author's machine), **published** (vendor or standard specification), **derived** (arithmetic from labelled inputs), **estimate** (a guess, with the method to replace it), **author-stated** (the author told me; no log attached), **unmeasured** (with a planned way to measure it).
 > No "first ever" claim is made.
+>
+> **The test machine's tuning, disclosed (author-stated; confirmed by nvidia-smi on 2026-10-29):** the RTX 4070's memory runs a +1000 MHz overclock in MSI Afterburner (11,501 MHz vs 10,501 stock, about 552 GB/s peak instead of 504), the core about 2,790 MHz undervolted (2.774 GHz measured inside a kernel run), Windows hardware-accelerated GPU scheduling off. Every measured speed here comes from that one machine in that state; numbers for any other hardware are estimates for others to test.
 
 ---
 
